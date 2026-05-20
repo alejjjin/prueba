@@ -652,7 +652,7 @@ function exportCSV(){
       coords[1]||'',
       coords[0]||'',
       p.frecuencia||''
-    ].map(function(v){return '+String(v).replace(/"/g,"")+';}).join(',');
+    ].map(function(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');
   });
   var csv = [headers.join(',')].concat(rows).join('
 ');
