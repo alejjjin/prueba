@@ -330,7 +330,7 @@ function pct(n,t){return t?Math.round(n/t*100)+'%':'0%';}
 // FILE HANDLING
 // Restore saved proxy URL
 (function(){
-  var DEFAULT_PROXY='https://stm-monitor-qqns.onrender.com/api/buses';
+  var DEFAULT_PROXY='/api/buses';
   var saved=localStorage.getItem('stm_proxy_url')||DEFAULT_PROXY;
   document.getElementById('proxy-url').value=saved;
   document.getElementById('proxy-inp-setup').value=saved;
