@@ -136,4 +136,7 @@ app.post('/api/buses', async (req, res) => {
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'reporte-buses-stm.html')));
 app.get('/reporte-buses-stm.html', (req, res) => res.sendFile(path.join(__dirname, 'reporte-buses-stm.html')));
 
+// Health check endpoint to prevent sleeping
+app.get('/health', (req, res) => res.json({status: 'ok', time: new Date().toISOString()}));
+
 app.listen(process.env.PORT || 3001, () => console.log('STM server running'));
