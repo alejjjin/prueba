@@ -330,7 +330,7 @@ function pct(n,t){return t?Math.round(n/t*100)+'%':'0%';}
 // FILE HANDLING
 // Restore saved proxy URL
 (function(){
-  var DEFAULT_PROXY='https://stm-proxy.onrender.com/api/buses';
+  var DEFAULT_PROXY='https://stm-monitor-qqns.onrender.com/api/buses';
   var saved=localStorage.getItem('stm_proxy_url')||DEFAULT_PROXY;
   document.getElementById('proxy-url').value=saved;
   document.getElementById('proxy-inp-setup').value=saved;
@@ -652,7 +652,7 @@ function exportCSV(){
       coords[1]||'',
       coords[0]||'',
       p.frecuencia||''
-    ].map(function(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');
+    ].map(function(v){return '+String(v).replace(/"/g,"")+';}).join(',');
   });
   var csv = [headers.join(',')].concat(rows).join('\n');
   var blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
