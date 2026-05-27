@@ -625,43 +625,46 @@ function toggleControles(){
   }
 }
 
-function exportCSV(){
-  if(!allData.length){alert('No hay datos para exportar.');return;}
-  var EMPRESAS_N={10:'COETC',20:'COME',50:'CUTCSA',70:'UCOT'};
-  var headers = ['Fecha','Hora','Linea','Empresa','Bus','Variante','Estado','Atraso_min','Punto_control','Hora_teorica','Dist_control_m','Lat','Lng','Senal_ms'];
+function exportCSV() {
   var now = new Date();
   var fecha = now.toLocaleDateString('es-UY');
   var hora = now.toLocaleTimeString('es-UY');
-  var rows = allData.map(function(f){
+
+  var headers = ['Fecha','Hora','Linea','Empresa','Bus','Variante','Estado',
+    'Atraso_min','Punto_control','Hora_teorica','Dist_control_m','Lat','Lng','Senal_ms'];
+
+  var rows = filtered.map(function(f) {
     var p = f.properties;
-    var cat = f._cat;
-    var labels = {ok:'En horario', late:'Atrasado', early:'Adelantado', bad:'Fuera de hora', ng:'Sin GPS'};
-    var coords = f.geometry ? f.geometry.coordinates : [null,null];
-    return [
+    var coords = f.geometry ? f.geometry.coordinates : [null, null];
+    var vals = [
       fecha,
       hora,
-      p.linea||'',
-      EMPRESAS_N[p.empresa]||p.empresa||'',
-      p.codigoBus||'',
-      p.variante||'',
-      labels[cat]||cat,
-      p._atraso_min!==null&&p._atraso_min!==undefined ? p._atraso_min : '',
-      p._control||'',
-      p._hora_teorica||'',
-      p._dist_m||'',
-      coords[1]||'',
-      coords[0]||'',
-      p.frecuencia||''
-    ].map(function(v){return '+String(v).replace(/"/g,"")+';}).join(',');
+      p.linea != null ? p.linea : '',
+      p.empresa != null ? (EMPRESAS[p.empresa] || p.empresa) : '',
+      p.codigoBus != null ? p.codigoBus : '',
+      p.variante != null ? p.variante : '',
+      getLabel(f._cat || p._cat || 'ng'),
+      p._atraso_min != null ? p._atraso_min : '',
+      p._control != null ? p._control : '',
+      p._hora_teorica != null ? p._hora_teorica : '',
+      p._dist_m != null ? p._dist_m : '',
+      coords[1] != null ? coords[1] : '',
+      coords[0] != null ? coords[0] : '',
+      p.frecuencia != null ? p.frecuencia : ''
+    ];
+    return vals.map(function(v) {
+      return String(v).replace(/"/g, '""');
+    }).join(',');
   });
+
   var csv = [headers.join(',')].concat(rows).join('\n');
-  var blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'buses-stm-'+now.toISOString().slice(0,16).replace('T','-').replace(':','')+'.csv';
-  document.body.appendChild(a);
+  a.href = url;
+  a.download = 'buses-stm-' + now.toISOString().slice(0,16).replace(/[T:]/g,'-') + '.csv';
   a.click();
-  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function focusBus(lat,lng){if(map&&lat&&lng)map.setView([lat,lng],16);}
