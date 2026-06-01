@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Reporte STM — Buses Montevideo</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="stm-logic.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#0f1117;--s1:#171b24;--s2:#1e2330;
+  --bd:rgba(255,255,255,0.07);--bd2:rgba(255,255,255,0.12);
+  --tx:#e8eaf0;--mu:#7a7f8e;
+  --ok:#2ecc71;--ok-bg:rgba(46,204,113,0.12);
+  --bad:#e74c3c;--bad-bg:rgba(231,76,60,0.12);
+  --ng:#f1c40f;--ng-bg:rgba(241,196,15,0.12);
+  --ac:#4f80ff;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);height:100vh;overflow:hidden;font-size:14px;}
+
+/* UPLOAD */
+#upload-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:2rem;text-align:center;}
+.upload-logo{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.15em;color:var(--mu);text-transform:uppercase;margin-bottom:2.5rem;}
+.upload-logo span{color:var(--ac);}
+.upload-card{background:var(--s1);border:1px dashed var(--bd2);border-radius:16px;padding:2.5rem 3.5rem;max-width:500px;width:100%;cursor:pointer;transition:all 0.2s;position:relative;}
+.upload-card:hover,.upload-card.drag{border-color:var(--ac);background:rgba(79,128,255,0.04);}
+.upload-icon{width:52px;height:52px;border-radius:12px;background:rgba(79,128,255,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;}
+.upload-icon svg{width:22px;height:22px;stroke:var(--ac);fill:none;stroke-width:1.5;}
+.upload-card h2{font-size:17px;font-weight:500;margin-bottom:0.4rem;}
+.upload-card p{font-size:13px;color:var(--mu);line-height:1.6;}
+.upload-card input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.upload-hint{margin-top:1.25rem;font-size:12px;color:var(--mu);}
+.upload-hint code{font-family:'DM Mono',monospace;background:var(--s2);padding:2px 6px;border-radius:4px;font-size:11px;}
+.sample-btn{margin-top:1rem;font-size:12px;color:var(--ac);cursor:pointer;background:none;border:none;font-family:'DM Sans',sans-serif;text-decoration:underline;}
+
+/* PROXY SETUP ON UPLOAD SCREEN */
+.proxy-setup{max-width:500px;width:100%;margin-top:1.25rem;background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:1rem 1.25rem;text-align:left;}
+.proxy-setup-title{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mu);margin-bottom:0.75rem;}
+.proxy-row{display:flex;gap:8px;align-items:center;}
+.proxy-inp{flex:1;font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font-family:'DM Mono',monospace;}
+.proxy-inp::placeholder{color:var(--mu);}
+.proxy-inp:focus{outline:none;border-color:var(--ac);}
+.btn-proxy-go{font-size:12px;padding:6px 14px;border-radius:8px;border:none;background:var(--ac);color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;flex-shrink:0;}
+.btn-proxy-go:hover{opacity:0.85;}
+.proxy-hint{font-size:11px;color:var(--mu);margin-top:6px;}
+.proxy-status-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle;}
+
+/* DASHBOARD */
+#dashboard{display:none;flex-direction:column;height:100vh;}
+#dashboard.on{display:flex;}
+
+/* TOPBAR */
+.topbar{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0.625rem 1.25rem;border-bottom:1px solid var(--bd);gap:10px;flex-wrap:wrap;}
+.brand{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:0.1em;color:var(--mu);}
+.brand span{color:var(--ac);}
+.topbar-center{display:flex;align-items:center;gap:8px;flex:1;justify-content:center;flex-wrap:wrap;}
+.proxy-url-inp{font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--bd);background:var(--s2);color:var(--tx);font-family:'DM Mono',monospace;width:280px;min-width:160px;}
+.proxy-url-inp::placeholder{color:var(--mu);}
+.proxy-url-inp:focus{outline:none;border-color:var(--ac);}
+.btn-refresh{display:flex;align-items:center;gap:5px;font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid var(--bd2);background:transparent;color:var(--tx);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;}
+.btn-refresh:hover{background:var(--s2);}
+.btn-refresh:disabled{opacity:0.4;cursor:not-allowed;}
+.btn-refresh svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;transition:transform 0.3s;}
+.btn-refresh.spinning svg{animation:spin 0.7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.auto-select{font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--bd);background:var(--s2);color:var(--tx);font-family:'DM Sans',sans-serif;cursor:pointer;}
+.auto-select:focus{outline:none;}
+.auto-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-family:'DM Mono',monospace;}
+.auto-on{background:rgba(46,204,113,0.15);color:var(--ok);}
+.auto-off{background:var(--s2);color:var(--mu);}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.ts{font-size:11px;color:var(--mu);font-family:'DM Mono',monospace;}
+.btn-sm{font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--bd2);background:transparent;color:var(--mu);cursor:pointer;font-family:'DM Sans',sans-serif;}
+.btn-sm:hover{background:var(--s2);color:var(--tx);}
+.countdown{font-size:11px;color:var(--mu);font-family:'DM Mono',monospace;min-width:30px;}
+
+/* PROGRESS BAR */
+.progress-bar{flex-shrink:0;height:2px;background:var(--bd);}
+.progress-fill{height:100%;background:var(--ac);width:0%;transition:width linear;}
+
+/* METRICS */
+.metrics{flex-shrink:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:0.75rem 1.25rem;border-bottom:1px solid var(--bd);}
+.metric{background:var(--s1);border:1px solid var(--bd);border-radius:10px;padding:0.625rem 1rem;cursor:pointer;position:relative;overflow:hidden;transition:border-color 0.15s;}
+.metric::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;opacity:0;transition:opacity 0.15s;}
+.metric.active{border-color:var(--bd2);}.metric.active::after{opacity:1;}
+.m-all::after{background:var(--ac);}
+.m-ok::after{background:var(--ok);}
+.m-bad::after{background:var(--bad);}
+.m-ng::after{background:var(--ng);}
+.metric:hover{border-color:var(--bd2);}
+.metric .lbl{font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px;}
+.metric .val{font-size:22px;font-weight:600;line-height:1;font-family:'DM Mono',monospace;}
+.metric .sub{font-size:11px;color:var(--mu);margin-top:2px;font-family:'DM Mono',monospace;}
+.m-all .val{color:var(--tx);}
+.m-ok .val{color:var(--ok);}
+.m-bad .val{color:var(--bad);}
+.m-ng .val{color:var(--ng);}
+
+/* FILTERS */
+.filters-bar{flex-shrink:0;display:flex;gap:8px;padding:0.5rem 1.25rem;border-bottom:1px solid var(--bd);align-items:center;flex-wrap:wrap;}
+.fsel{font-size:13px;padding:5px 9px;border-radius:8px;border:1px solid var(--bd);background:var(--s1);color:var(--tx);font-family:'DM Sans',sans-serif;cursor:pointer;}
+.fsel:focus{outline:none;border-color:var(--ac);}
+.fsearch{font-size:13px;padding:5px 10px;border-radius:8px;border:1px solid var(--bd);background:var(--s1);color:var(--tx);font-family:'DM Mono',monospace;width:150px;}
+.fsearch::placeholder{color:var(--mu);}
+.fsearch:focus{outline:none;border-color:var(--ac);}
+.fcount{font-size:11px;color:var(--mu);font-family:'DM Mono',monospace;margin-left:auto;}
+
+/* BODY */
+.body{flex:1;display:grid;grid-template-columns:1fr 360px;overflow:hidden;}
+@media(max-width:860px){.body{grid-template-columns:1fr;}}
+
+/* MAP */
+.map-area{position:relative;overflow:hidden;}
+#map{width:100%;height:100%;}
+
+/* ERROR TOAST */
+.err-toast{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:2000;background:var(--bad-bg);border:1px solid rgba(231,76,60,0.3);color:var(--bad);font-size:12px;padding:8px 16px;border-radius:20px;display:none;white-space:nowrap;backdrop-filter:blur(8px);}
+
+/* STATE FILTER FLOATING */
+.state-filter{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);z-index:1000;display:flex;gap:4px;background:rgba(12,14,20,0.93);backdrop-filter:blur(12px);border:1px solid var(--bd2);border-radius:40px;padding:5px 8px;white-space:nowrap;}
+.sf-btn{display:flex;align-items:center;gap:6px;font-size:12px;padding:6px 14px;border-radius:30px;border:none;background:transparent;color:var(--mu);font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.15s;}
+.sf-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.sf-btn:hover{color:var(--tx);}
+.sf-btn.active{background:rgba(255,255,255,0.07);color:var(--tx);}
+.sf-ok .sf-dot{background:var(--ok);}
+.sf-bad .sf-dot{background:var(--bad);}
+.sf-ng .sf-dot{background:var(--ng);}
+.sf-btn.sf-ok.active{color:var(--ok);}
+.sf-btn.sf-bad.active{color:var(--bad);}
+.sf-btn.sf-ng.active{color:var(--ng);}
+.sf-btn.sf-all.active{color:var(--ac);}
+
+/* TABLE */
+.table-panel{border-left:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;}
+.tp-head{flex-shrink:0;padding:0.625rem 1rem;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;}
+.tp-title{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;color:var(--mu);}
+.tp-count{font-size:11px;color:var(--mu);font-family:'DM Mono',monospace;}
+.table-wrap{flex:1;overflow-y:auto;}
+table{width:100%;border-collapse:collapse;}
+thead th{font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--mu);padding:0.5rem 0.875rem;text-align:left;background:var(--s1);position:sticky;top:0;border-bottom:1px solid var(--bd);font-weight:500;cursor:pointer;white-space:nowrap;}
+thead th:hover{color:var(--tx);}
+.sa{margin-left:3px;opacity:0.5;font-size:10px;}
+tbody tr{border-bottom:1px solid var(--bd);cursor:pointer;transition:background 0.1s;}
+tbody tr:hover{background:var(--s2);}
+tbody tr:last-child{border-bottom:none;}
+td{padding:0.5rem 0.875rem;font-size:13px;}
+td.mono{font-family:'DM Mono',monospace;font-size:12px;}
+.badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap;}
+.bk-ok{background:var(--ok-bg);color:var(--ok);}
+.bk-bad{background:var(--bad-bg);color:var(--bad);}
+.bk-ng{background:var(--ng-bg);color:#c8a800;}
+.empty-row td{text-align:center;padding:2rem;color:var(--mu);}
+.cbar{display:inline-block;width:3px;height:14px;border-radius:2px;vertical-align:middle;margin-right:6px;}
+</style>
+</head>
+<body>
+
+<!-- UPLOAD SCREEN -->
+<div id="upload-screen">
+  <div class="upload-logo"><span>STM</span> · Montevideo · Monitor de buses</div>
+
+  <div class="upload-card" id="drop-zone">
+    <input type="file" id="file-input" accept=".json,.geojson"/>
+    <div class="upload-icon">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+    </div>
+    <h2>Cargar datos de buses</h2>
+    <p>Arrastrá el JSON descargado de la API, o hacé clic para seleccionarlo.</p>
+  </div>
+  <div class="upload-hint">Formato: GeoJSON de <code>POST /buses/rest/stm-online</code></div>
+  <button class="sample-btn" onclick="loadSample()">Cargar datos de ejemplo</button>
+
+  <!-- CONEXIÓN DIRECTA -->
+  <div class="proxy-setup">
+    <div class="proxy-setup-title">⚡ Conectar en tiempo real</div>
+    <div class="proxy-row">
+      <button class="btn-proxy-go" onclick="startWithProxy()">Conectar</button>
+    </div>
+    <div class="proxy-hint">Obtiene datos directamente de la API de STM sin necesidad de un servidor proxy.</div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="topbar">
+    <div class="brand"><span>STM</span> · Monitor</div>
+
+    <div class="topbar-center">
+      <button class="btn-refresh" id="btn-refresh" onclick="fetchFromProxy()">
+        <svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        Actualizar
+      </button>
+      <select class="auto-select" id="auto-select" onchange="toggleAuto()">
+        <option value="0">Auto: OFF</option>
+        <option value="30">Cada 30s</option>
+        <option value="60">Cada 1 min</option>
+        <option value="120">Cada 2 min</option>
+        <option value="300">Cada 5 min</option>
+      </select>
+      <span class="auto-badge auto-off" id="auto-badge">—</span>
+    </div>
+
+    <div class="topbar-right">
+      <span class="ts" id="ts">—</span>
+      <button class="btn-sm" onclick="resetDashboard()">← Otro archivo</button>
+    </div>
+  </div>
+
+  <!-- PROGRESS BAR FOR AUTO REFRESH -->
+  <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+
+  <div class="metrics">
+    <div class="metric m-all active" id="tab-all" onclick="setTab('all',this)">
+      <div class="lbl">Total buses</div>
+      <div class="val" id="m-total">0</div>
+      <div class="sub" id="p-total">—</div>
+    </div>
+    <div class="metric m-ok" id="tab-ok" onclick="setTab('ok',this)">
+      <div class="lbl">🟢 En horario</div>
+      <div class="val" id="m-ok">0</div>
+      <div class="sub" id="p-ok">0%</div>
+    </div>
+    <div class="metric m-bad" id="tab-late" onclick="setTab('late',this)">
+      <div class="lbl">🔴 Atrasados</div>
+      <div class="val" id="m-late">0</div>
+      <div class="sub" id="p-late">0%</div>
+    </div>
+    <div class="metric m-bad" id="tab-early" onclick="setTab('early',this)">
+      <div class="lbl">🟠 Adelantados</div>
+      <div class="val" id="m-early">0</div>
+      <div class="sub" id="p-early">0%</div>
+    </div>
+    <div class="metric m-ng" id="tab-ng" onclick="setTab('ng',this)">
+      <div class="lbl">🟡 Sin GPS</div>
+      <div class="val" id="m-ng">0</div>
+      <div class="sub" id="p-ng">0%</div>
+    </div>
+  </div>
+
+  <div class="filters-bar">
+    <span style="font-size:12px;color:var(--mu);">Filtrar:</span>
+    <select class="fsel" id="f-empresa" onchange="applyFilters()">
+      <option value="">Todas las empresas</option>
+    </select>
+    <select class="fsel" id="f-linea" onchange="applyFilters()">
+      <option value="">Todas las líneas</option>
+    </select>
+    <input class="fsearch" id="f-search" placeholder="Bus # o línea..." oninput="applyFilters()"/>
+    <span class="fcount" id="fcount"></span>
+    <button onclick="exportCSV()" style="font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid var(--bd2);background:transparent;color:var(--tx);cursor:pointer;font-family:DM Sans,sans-serif;margin-left:auto;">⬇ Exportar CSV</button>
+  </div>
+
+  <div class="body">
+    <div class="map-area">
+      <div id="map"></div>
+      <div class="err-toast" id="err-toast"></div>
+      <div class="state-filter">
+        <button class="sf-btn sf-all active" id="sf-all" onclick="setSF('all',this)">Todos</button>
+        <button class="sf-btn sf-ok" id="sf-ok" onclick="setSF('ok',this)">
+          <span class="sf-dot"></span>En horario
+        </button>
+        <button class="sf-btn sf-bad" id="sf-late" onclick="setSF('late',this)">
+          <span class="sf-dot"></span>Atrasados
+        </button>
+        <button class="sf-btn sf-bad" id="sf-early" onclick="setSF('early',this)">
+          <span class="sf-dot"></span>Adelantados
+        </button>
+        <button class="sf-btn sf-ng" id="sf-ng" onclick="setSF('ng',this)">
+          <span class="sf-dot"></span>Sin GPS
+        </button>
+      </div>
+    </div>
+
+    <div class="table-panel">
+      <div class="tp-head">
+        <span class="tp-title" id="tp-title">Todos los buses</span>
+        <span class="tp-count" id="tp-count"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortBy('linea')">Línea<span class="sa" id="sa-linea"></span></th>
+              <th onclick="sortBy('bus')">Bus<span class="sa" id="sa-bus"></span></th>
+              <th onclick="sortBy('estado')">Estado<span class="sa" id="sa-estado"></span></th>
+              <th onclick="sortBy('frecuencia')">Señal<span class="sa" id="sa-frecuencia"></span></th>
+            </tr>
+          </thead>
+          <tbody id="bus-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var GPS_THRESH=5*60*1000,LATE_MS=2*60*1000;
+var CAT_COLOR={ok:'#2ecc71',late:'#e74c3c',early:'#e67e22',bad:'#e74c3c',ng:'#f1c40f'};
+var CAT_LABEL={ok:'En horario',late:'Atrasado',early:'Adelantado',bad:'Fuera de hora',ng:'Sin GPS'};
+var CAT_BADGE={ok:'bk-ok',bad:'bk-bad',ng:'bk-ng'};
+var EMPRESAS={10:'COETC',20:'COME',50:'CUTCSA',70:'UCOT'};
+var allData=[],filtered=[],currentTab='all',sortCol='linea',sortDir=1;
+var map,layerGroup,controlesLayer;
+var autoTimer=null,progressTimer=null,autoInterval=0,progressStart=0;
+
+function classify(f){
+  if(f.properties._cat) return f.properties._cat;
+  var fr=f.properties.frecuencia;
+  if(!fr||fr>GPS_THRESH) return 'ng';
+  if(fr>LATE_MS) return 'bad';
+  return 'ok';
+}
+function getColor(cat){return CAT_COLOR[cat]||'#e74c3c';}
+function getLabel(cat){return CAT_LABEL[cat]||'Fuera de hora';}
+function getBadge(cat){return cat==='ok'?'bk-ok':cat==='ng'?'bk-ng':'bk-bad';}
+function fmtMs(ms){
+  if(!ms) return '—';
+  var s=Math.round(ms/1000);
+  if(s<60) return s+'s';
+  var m=Math.round(s/60);
+  if(m<60) return m+' min';
+  return Math.floor(m/60)+'h '+(m%60)+'m';
+}
+function pct(n,t){return t?Math.round(n/t*100)+'%':'0%';}
+
+// FILE HANDLING
+// Cargar stm_data.json y pasárselo a STMLogic al iniciar
+(function(){
+  fetch('stm_data.json')
+    .then(function(r){ return r.json(); })
+    .then(function(data){ STMLogic.init(data); })
+    .catch(function(e){ console.warn('[STMLogic] stm_data.json no encontrado, se usará clasificación por frecuencia:', e.message); });
+})();
+document.getElementById('file-input').addEventListener('change',function(e){var f=e.target.files[0];if(f)readFile(f);});
+var dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('drag');});
+dz.addEventListener('dragleave',function(){dz.classList.remove('drag');});
+dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('drag');var f=e.dataTransfer.files[0];if(f)readFile(f);});
+function readFile(file){
+  var r=new FileReader();
+  r.onload=function(e){try{processData(JSON.parse(e.target.result),file.name,false);}catch(err){alert('Error: '+err.message);}};
+  r.readAsText(file);
+}
+
+// PROXY
+function startWithProxy(){
+  showDashboard('en vivo');
+  fetchFromProxy();
+}
+
+async function fetchFromProxy(){
+  var btn=document.getElementById('btn-refresh');
+  btn.disabled=true;btn.classList.add('spinning');
+  try{
+    var data=await STMLogic.fetchBuses();
+    processData(data,'en vivo',true);
+  }catch(e){
+    showToast('Error al conectar con la API de STM: '+e.message);
+  }finally{
+    btn.disabled=false;btn.classList.remove('spinning');
+  }
+}
+
+function showToast(msg){
+  var t=document.getElementById('err-toast');
+  t.textContent=msg;t.style.display='block';
+  setTimeout(function(){t.style.display='none';},4000);
+}
+
+// AUTO REFRESH
+function toggleAuto(){
+  var val=parseInt(document.getElementById('auto-select').value);
+  clearAuto();
+  if(val===0){
+    document.getElementById('auto-badge').textContent='—';
+    document.getElementById('auto-badge').className='auto-badge auto-off';
+    document.getElementById('progress-fill').style.width='0%';
+    document.getElementById('progress-fill').style.transition='none';
+    return;
+  }
+  autoInterval=val;
+  document.getElementById('auto-badge').className='auto-badge auto-on';
+  startAutoRefresh();
+}
+
+function startAutoRefresh(){
+  if(!autoInterval) return;
+  // progress bar
+  var fill=document.getElementById('progress-fill');
+  fill.style.transition='none';fill.style.width='0%';
+  setTimeout(function(){
+    fill.style.transition='width '+autoInterval+'s linear';
+    fill.style.width='100%';
+  },50);
+  // badge countdown
+  var remaining=autoInterval;
+  document.getElementById('auto-badge').textContent='⟳ '+remaining+'s';
+  progressTimer=setInterval(function(){
+    remaining--;
+    document.getElementById('auto-badge').textContent='⟳ '+remaining+'s';
+    if(remaining<=0) clearInterval(progressTimer);
+  },1000);
+  // actual refresh
+  autoTimer=setTimeout(function(){
+    fetchFromProxy();
+    startAutoRefresh();
+  },autoInterval*1000);
+}
+
+function clearAuto(){
+  clearTimeout(autoTimer);clearInterval(progressTimer);
+  autoTimer=null;progressTimer=null;autoInterval=0;
+}
+
+function loadSample(){
+  var lineas=['G','D1','D5','100','101','102','103','104','G6','L1','L2','174','175','180'];
+  var frArr=[20000,45000,120000,250000,500000,900000,null];
+  var features=[];
+  for(var i=0;i<250;i++){
+    features.push({type:'Feature',
+      geometry:{type:'Point',coordinates:[-56.24+Math.random()*0.18,-34.88+Math.random()*0.12]},
+      properties:{codigoBus:1000+i,linea:lineas[Math.floor(Math.random()*lineas.length)],
+        variante:Math.floor(Math.random()*3)+1,empresa:[10,20,50,70][Math.floor(Math.random()*4)],
+        frecuencia:frArr[Math.floor(Math.random()*frArr.length)]}});
+  }
+  processData({features:features},'datos-de-ejemplo',false);
+}
+
+function processData(data,fname,fromProxy){
+  allData=(data.features||[]).map(function(f){f._cat=classify(f);return f;});
+  var empSet=new Set(),linSet=new Set();
+  allData.forEach(function(f){
+    if(f.properties.empresa)empSet.add(f.properties.empresa);
+    if(f.properties.linea)linSet.add(f.properties.linea);
+  });
+  var esel=document.getElementById('f-empresa');
+  esel.innerHTML='<option value="">Todas las empresas</option>';
+  [...empSet].sort().forEach(function(e){esel.innerHTML+='<option value="'+e+'">'+(EMPRESAS[e]||'Empresa '+e)+'</option>';});
+  var lsel=document.getElementById('f-linea');
+  lsel.innerHTML='<option value="">Todas las líneas</option>';
+  [...linSet].sort(function(a,b){return a.localeCompare(b,undefined,{numeric:true});}).forEach(function(l){lsel.innerHTML+='<option value="'+l+'">'+l+'</option>';});
+
+  var now=new Date().toLocaleString('es-UY');
+  document.getElementById('ts').textContent=now+' · '+allData.length+' buses';
+
+  if(!document.getElementById('dashboard').classList.contains('on')){
+    showDashboard(fname);
+  }
+  applyFilters();
+}
+
+function showDashboard(fname){
+  document.getElementById('upload-screen').style.display='none';
+  document.getElementById('dashboard').classList.add('on');
+  initMap();
+}
+
+var CONTROLES_DATA = {"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.104394,-34.894826]},"properties":{"cod":"1","desc":"MALVIN","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.104408,-34.895732]},"properties":{"cod":"2","desc":"MALVIN","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.213595,-34.90843]},"properties":{"cod":"19","desc":"ADUANA","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.13246,-34.856228]},"properties":{"cod":"27","desc":"INTERCAMBIADOR BELLONI","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.131653,-34.855256]},"properties":{"cod":"30","desc":"INTERCAMBIADOR BELLONI","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.145437,-34.8734]},"properties":{"cod":"66","desc":"COMERCIO/Avellaneda","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200702,-34.90706]},"properties":{"cod":"89","desc":"PZA INDEPENDT Solis","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.11707,-34.871601]},"properties":{"cod":"103","desc":"MALVIN ALTO","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.11593,-34.871266]},"properties":{"cod":"159","desc":"MALVIN ALTO","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.110203,-34.887003]},"properties":{"cod":"160","desc":"AV ITALIA/H Yrigoyen","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.202472,-34.902547]},"properties":{"cod":"178","desc":"CIUDADELA TERM.","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.144202,-34.874873]},"properties":{"cod":"239","desc":"J ROUSSEAU/Comercio","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.187047,-34.890277]},"properties":{"cod":"273","desc":"PALACIO LEGISLATIVO","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.165769,-34.888807]},"properties":{"cod":"322","desc":"BR ARTIGAS/Hocquart","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.165856,-34.888014]},"properties":{"cod":"326","desc":"BR ARTIGAS/N Palmira","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.186174,-34.891564]},"properties":{"cod":"346","desc":"PALACIO LEGISLATIVO","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.19954,-34.90364]},"properties":{"cod":"5759","desc":"AV URUGUAY y FLORIDA","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.198869,-34.903587]},"properties":{"cod":"6684","desc":"AV URUGUAY y ANDES","linea":"402"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.147978,-34.87933]},"properties":{"cod":"23","desc":"8 OCT/J B y Ordo\u00c3\u00b1ez","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.216066,-34.833864]},"properties":{"cod":"54","desc":"SAYAGO","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.169469,-34.862774]},"properties":{"cod":"73","desc":"G FLORESJ B Ordo\u00c3\u00b1ez","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.083186,-34.881861]},"properties":{"cod":"86","desc":"PORTONESTerminal","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.241989,-34.788492]},"properties":{"cod":"139","desc":"HOSPITAL SAINT BOIS","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.269592,-34.764565]},"properties":{"cod":"140","desc":"FAUQUET/Melilla","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.248019,-34.79635]},"properties":{"cod":"158","desc":"LEZICAGuanahany","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.130146,-34.886766]},"properties":{"cod":"168","desc":"COMERCIO y AV ITALIA","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.121654,-34.895879]},"properties":{"cod":"234","desc":"AV RIVERA/S Lopez","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.270573,-34.760986]},"properties":{"cod":"5805","desc":"CNO MELILLA y CNO PEIXOTO","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.224001,-34.799399]},"properties":{"cod":"5848","desc":"TERMINAL COLON","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.223444,-34.798584]},"properties":{"cod":"5849","desc":"TERMINAL COLON","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.222852,-34.79948]},"properties":{"cod":"6608","desc":"TERMINAL COLON","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.083151,-34.882388]},"properties":{"cod":"6681","desc":"PORTONES","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.221825,-34.799606]},"properties":{"cod":"6682","desc":"TERMINAL COLON","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.124238,-34.898048]},"properties":{"cod":"6692","desc":"CEMENTERIO BUCEO","linea":"2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.174996,-34.901514]},"properties":{"cod":"7","desc":"18 DE JULIO  F Crespo","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.217402,-34.85849]},"properties":{"cod":"41","desc":"PSO MOLINO/E. ROMERO","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.194965,-34.882232]},"properties":{"cod":"42","desc":"PCIO LUZ Entre R\u00c3\u00ados","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.202227,-34.872282]},"properties":{"cod":"57","desc":"PLAZA CUBA","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.164271,-34.902206]},"properties":{"cod":"65","desc":"BR ARTIGASAv Rivera","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.124816,-34.897521]},"properties":{"cod":"76","desc":"CEMENTERIO BUCEO","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.176317,-34.902038]},"properties":{"cod":"281","desc":"UNIVERSIDAD","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.164211,-34.902787]},"properties":{"cod":"323","desc":"BR ARTIGASJ E Rodo","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.188113,-34.892167]},"properties":{"cod":"347","desc":"PALACIO LEGISLATIVO","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.220856,-34.831059]},"properties":{"cod":"5854","desc":"SAYAGO","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.168989,-34.919072]},"properties":{"cod":"6805","desc":"TEATRO DE VERANO","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.227124,-34.75299]},"properties":{"cod":"24433","desc":"TERESA MUNOZ Y E.ANDREON","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.226954,-34.754658]},"properties":{"cod":"24434","desc":"CRIO. LA PAZ","linea":"G"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.196998,-34.906306]},"properties":{"cod":"5","desc":"18 JULIOConvenci\u00c3\u00b3n","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.186888,-34.905583]},"properties":{"cod":"6","desc":"INTENDENCIA","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.152697,-34.882153]},"properties":{"cod":"25","desc":"8 DE OCT L A Herrera","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.135244,-34.871437]},"properties":{"cod":"26","desc":"UNION/Pan de Az\u00c3\u00bacar","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.162261,-34.891917]},"properties":{"cod":"60","desc":"TRES CRUCESPte Berro","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.201312,-34.909504]},"properties":{"cod":"93","desc":"PLAZA ESPA\u00c3\u0091A","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.111508,-34.880897]},"properties":{"cod":"162","desc":"H YRIGOYEN/Igu\u00c3\u00a1","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.13591,-34.872198]},"properties":{"cod":"341","desc":"UNI\u00c3\u0093N/ S Perez","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.19196,-34.905938]},"properties":{"cod":"342","desc":"PLAZA CAGANCHA","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200684,-34.906004]},"properties":{"cod":"5729","desc":"PZA INDEPENDENCIA","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.16878,-34.899088]},"properties":{"cod":"6308","desc":"AV 18 DE JULIO y JUAN PAULLIER","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.202678,-34.909201]},"properties":{"cod":"6606","desc":"Plaza Espa\u00c3\u00b1a","linea":"113"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.132482,-34.856256]},"properties":{"cod":"283","desc":"INTERCAMBIADOR BELLONI","linea":"111"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.12138,-34.865259]},"properties":{"cod":"344","desc":"VERACIERTO/V DeMoros","linea":"111"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.19998,-34.905191]},"properties":{"cod":"506","desc":"C. VIEJA","linea":"111"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.133909,-34.862971]},"properties":{"cod":"540","desc":"8 OCTVillademoros","linea":"111"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.213329,-34.909078]},"properties":{"cod":"5506","desc":"ADUANA","linea":"111"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.164794,-34.897458]},"properties":{"cod":"4","desc":"OBELISCO","linea":"21"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.195857,-34.906224]},"properties":{"cod":"11","desc":"18 DE JULIO/R Branco","linea":"21"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.16491,-34.894881]},"properties":{"cod":"58","desc":"TRES CRUCES","linea":"21"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.038465,-34.875678]},"properties":{"cod":"167","desc":"PTE CARRASCOBarradas","linea":"21"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.119011,-34.881233]},"properties":{"cod":"473","desc":"FACULTAD CIENCIAS","linea":"21"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.021628,-34.864565]},"properties":{"cod":"488","desc":"GEANT","linea":"21"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200906,-34.906423]},"properties":{"cod":"5939","desc":"PZA INDEPENDENCIA","linea":"21"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200914,-34.906281]},"properties":{"cod":"6718","desc":"PZA INDEPENDENCIA","linea":"21"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.084046,-34.88557]},"properties":{"cod":"6762","desc":"JUSTINO ZAVALA MUNIZ y SARA DE IBA\u00c3\u0091EZ","linea":"21"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.187771,-34.890045]},"properties":{"cod":"115","desc":"PALACIO LEGISLATIVO","linea":"187"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.179575,-34.876398]},"properties":{"cod":"146","desc":"G FLORES/Garibaldi","linea":"187"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.186273,-34.888886]},"properties":{"cod":"151","desc":"FACULTAD MEDICINA","linea":"187"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.160241,-34.889433]},"properties":{"cod":"154","desc":"8 OCTUBREGaribaldi","linea":"187"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.194535,-34.886805]},"properties":{"cod":"206","desc":"PCIO DE LA LUZ","linea":"187"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.166198,-34.884655]},"properties":{"cod":"290","desc":"BR ARTIGAS/Garibaldi","linea":"187"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.202428,-34.907678]},"properties":{"cod":"6985","desc":"TEATRO SOLIS","linea":"187"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.166833,-34.878163]},"properties":{"cod":"62","desc":"BR ARTIGAS/Canal 5","linea":"188"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.130057,-34.892928]},"properties":{"cod":"75","desc":"J B ORDO\u00c3\u0091EZ/R Anador","linea":"140"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.186989,-34.904618]},"properties":{"cod":"132","desc":"COLONIA/Ejido","linea":"140"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.187086,-34.90368]},"properties":{"cod":"208","desc":"MERCEDES/Ejido","linea":"140"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.149772,-34.894203]},"properties":{"cod":"350","desc":"NAVARROQuintela","linea":"140"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.201959,-34.903673]},"properties":{"cod":"5758","desc":"CERRITO y JUNCAL","linea":"140"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.104166,-34.820511]},"properties":{"cod":"51","desc":"SARAVIA Y DA VINCI","linea":"100"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.124608,-34.841748]},"properties":{"cod":"198","desc":"FLOR D MARO\u00c3\u0091ASLibia","linea":"100"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.117242,-34.824737]},"properties":{"cod":"287","desc":"P RIELESVilla Farr\u00c3\u00a9","linea":"100"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200876,-34.906106]},"properties":{"cod":"6702","desc":"PZA INDEPENDENCIA","linea":"100"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.057196,-34.888892]},"properties":{"cod":"56","desc":"HOTEL CARRASCO","linea":"105"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.096892,-34.872434]},"properties":{"cod":"101","desc":"LA CRUZ DE CARRASCO","linea":"105"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.142913,-34.876417]},"properties":{"cod":"117","desc":"UNION Comercio","linea":"105"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.030022,-34.878599]},"properties":{"cod":"228","desc":"PUENTE CARRASCO (RBLA)","linea":"105"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.083687,-34.881849]},"properties":{"cod":"5508","desc":"PORTONES/Terminal","linea":"105"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.060568,-34.867026]},"properties":{"cod":"351","desc":"P CARRASCO/S M\u00c3\u00b3nica","linea":"109"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.048291,-34.858464]},"properties":{"cod":"507","desc":"P CARRASCOMonterrey","linea":"109"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.039141,-34.852625]},"properties":{"cod":"522","desc":"PSO CARRASCOAv Plya","linea":"109"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.038921,-34.852302]},"properties":{"cod":"6513","desc":"PASO CARRASCO","linea":"109"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.031878,-34.848085]},"properties":{"cod":"6900","desc":"BARRIO OBRERO (RACINE)","linea":"109"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.136416,-34.799778]},"properties":{"cod":"77","desc":"MANGA - ANDALUZBELLONI","linea":"110"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.148708,-34.716215]},"properties":{"cod":"78","desc":"Ptas Macadam","linea":"110"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.136195,-34.780987]},"properties":{"cod":"79","desc":"Instrucciones Belloni","linea":"110"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.133328,-34.760259]},"properties":{"cod":"80","desc":"MANGA/Cno Tropas","linea":"110"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.141006,-34.828702]},"properties":{"cod":"82","desc":"PIEDRAS BLANCAS","linea":"110"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.135736,-34.798473]},"properties":{"cod":"6601","desc":"MANGA","linea":"110"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.083465,-34.882808]},"properties":{"cod":"85","desc":"PORTONES","linea":"112"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.073084,-34.891025]},"properties":{"cod":"313","desc":"PUNTA GORDA","linea":"112"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.11138,-34.870316]},"properties":{"cod":"365","desc":"C CARRASCO/Gallinal","linea":"112"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.083705,-34.88329]},"properties":{"cod":"527","desc":"PORTONES","linea":"112"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.066068,-34.897946]},"properties":{"cod":"532","desc":"PTA GORDASiria","linea":"112"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.068321,-34.892352]},"properties":{"cod":"6298","desc":"AV BOLIVIA y PABLO PODESTA","linea":"112"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.133115,-34.85533]},"properties":{"cod":"6300","desc":"INTERCAMBIADOR BELLONI","linea":"112"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.154159,-34.882945]},"properties":{"cod":"6859","desc":"M MORENO y AV 8 DE OCTUBRE","linea":"112"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.152581,-34.882439]},"properties":{"cod":"6886","desc":"8 DE OCTUBRECentenario","linea":"112"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.193385,-34.899076]},"properties":{"cod":"5730","desc":"ESTACION CENTRAL AFE","linea":"PA"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.149808,-34.839434]},"properties":{"cod":"147","desc":"HIP\u00c3\u0093DROMO","linea":"102"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.180699,-34.825115]},"properties":{"cod":"223","desc":"GTA LOURDESTerminal","linea":"102"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.133626,-34.858308]},"properties":{"cod":"314","desc":"8 OCT/G Piccioli","linea":"102"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.179509,-34.903278]},"properties":{"cod":"8","desc":"PLAZA TREINTA Y TRES","linea":"103"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.086227,-34.800908]},"properties":{"cod":"180","desc":"CNO MALDONADOKm 16","linea":"103"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.043576,-34.77641]},"properties":{"cod":"195","desc":"VILLA GARCIA","linea":"103"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.101844,-34.824338]},"properties":{"cod":"197","desc":"PUNTA RIELES","linea":"103"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.024348,-34.769027]},"properties":{"cod":"509","desc":"LOS AROMOS","linea":"103"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.044182,-34.776611]},"properties":{"cod":"6706","desc":"RUTA8 KM21","linea":"103"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.065055,-34.796374]},"properties":{"cod":"7023","desc":"Estadio C.DS.","linea":"103"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.070148,-34.792262]},"properties":{"cod":"7026","desc":"RUTA NAL 8 BRIG GRAL J A LAVALLEJA","linea":"103"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.03538,-34.780478]},"properties":{"cod":"7038","desc":"Barrio El Monarca","linea":"103"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.165664,-34.911256]},"properties":{"cod":"14","desc":"PARQUE RODO","linea":"522"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.193792,-34.884025]},"properties":{"cod":"44","desc":"PCIO LUZ/Gral Luna","linea":"522"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.196213,-34.857327]},"properties":{"cod":"186","desc":"PARQUE POSADAS","linea":"522"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.136991,-34.911154]},"properties":{"cod":"225","desc":"POCITOS/Terminal","linea":"522"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.187994,-34.905665]},"properties":{"cod":"269","desc":"18 DE JULIO/Yaguaron","linea":"522"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.230057,-34.829539]},"properties":{"cod":"277","desc":"PLANTA COMESA","linea":"522"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.241583,-34.822719]},"properties":{"cod":"386","desc":"AV MILLAN/Lecocq","linea":"522"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.22857,-34.828318]},"properties":{"cod":"537","desc":"SAYAGO NORTE/Lecocq","linea":"522"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.136957,-34.905754]},"properties":{"cod":"20","desc":"POCITOS/Shopping","linea":"104"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.092572,-34.893576]},"properties":{"cod":"37","desc":"MALVIN/Acon_Gallinal","linea":"104"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.149658,-34.915052]},"properties":{"cod":"138","desc":"POCITOSBr Espa\u00c3\u00b1a","linea":"104"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-55.995467,-34.859902]},"properties":{"cod":"491","desc":"RBLA COSTANERAAncap","linea":"104"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.201306,-34.904361]},"properties":{"cod":"16","desc":"C. VIEJA - T Sol\u00c3\u00ads","linea":"116"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.144318,-34.910076]},"properties":{"cod":"84","desc":"POCITOSM Pagola","linea":"116"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.145208,-34.910687]},"properties":{"cod":"291","desc":"POCITOS/M Barreiro","linea":"116"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.186579,-34.908405]},"properties":{"cod":"296","desc":"CANELONES/Ejido","linea":"116"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.161386,-34.928233]},"properties":{"cod":"59","desc":"PTA CARRETAS TER","linea":"117"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.166987,-34.911411]},"properties":{"cod":"217","desc":"PARQUE RODO","linea":"117"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.138469,-34.901212]},"properties":{"cod":"233","desc":"RIVERA - L A Herrera","linea":"141"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.188047,-34.906661]},"properties":{"cod":"242","desc":"INTENDENCIA","linea":"141"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.199912,-34.908396]},"properties":{"cod":"256","desc":"SORIANO y CIUDADELA","linea":"141"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.143578,-34.875627]},"properties":{"cod":"294","desc":"UNIONJoanic\u00c3\u00b3","linea":"141"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.186678,-34.907463]},"properties":{"cod":"300","desc":"INTENDENCIA","linea":"141"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.196893,-34.907271]},"properties":{"cod":"391","desc":"SAN JOSEConvenci\u00c3\u00b3n","linea":"141"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.175112,-34.845889]},"properties":{"cod":"90","desc":"CEMENTERIO DEL NORTE","linea":"144"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.141601,-34.875632]},"properties":{"cod":"267","desc":"UNION/Gdor Viana","linea":"144"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.167531,-34.869998]},"properties":{"cod":"183","desc":"BR ARTIGAS L A Herrera","linea":"180"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.152892,-34.854917]},"properties":{"cod":"236","desc":"PZA GERARDO CUESTA","linea":"180"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.154619,-34.855118]},"properties":{"cod":"6904","desc":"PZA GERARDO CUESTA","linea":"180"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.140017,-34.854177]},"properties":{"cod":"219","desc":"PICCIOLI/Osvald Cruz","linea":"D8"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.069925,-34.79212]},"properties":{"cod":"5700","desc":"ZONA AM\u00c3\u0089RICA","linea":"D8"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.073245,-34.892847]},"properties":{"cod":"541","desc":"PUNTA GORDA","linea":"142"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.079931,-34.89274]},"properties":{"cod":"274","desc":"PUNTA GORDA/Gral Paz","linea":"D11"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.080041,-34.890734]},"properties":{"cod":"275","desc":"PUNTA GORDA/Gral Paz","linea":"D11"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.177726,-34.82177]},"properties":{"cod":"164","desc":"GTA LOURDES/Chicago","linea":"149"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.161561,-34.806066]},"properties":{"cod":"165","desc":"INSTR Y MENDOZA","linea":"149"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.187211,-34.877846]},"properties":{"cod":"210","desc":"MILLANGuadalupe","linea":"149"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.189777,-34.833689]},"properties":{"cod":"330","desc":"INSTRUCCISA Saravia","linea":"149"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.2023,-34.846011]},"properties":{"cod":"343","desc":"MILLAN/Instrucciones","linea":"149"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.147604,-34.888792]},"properties":{"cod":"169","desc":"A ITALIA/L A Herrera","linea":"64"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.109813,-34.888298]},"properties":{"cod":"301","desc":"H YRIGOYEN/E Lopez","linea":"64"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.155373,-34.89125]},"properties":{"cod":"332","desc":"ESTADIO CENTENARIO","linea":"64"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.094666,-34.891051]},"properties":{"cod":"335","desc":"AV RIVERAA Gallinal","linea":"64"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.171665,-34.899055]},"properties":{"cod":"6516","desc":"DR MARTIN C MARTINEZ y COLONIA","linea":"64"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.129917,-34.886941]},"properties":{"cod":"171","desc":"AV ITALIAComercio","linea":"D10"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.149302,-34.920488]},"properties":{"cod":"15","desc":"21 SETIEMBRE RAMBLA GANDHI","linea":"121"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.164655,-34.898888]},"properties":{"cod":"61","desc":"HOSPITAL P ROSSEL","linea":"121"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.159918,-34.907107]},"properties":{"cod":"252","desc":"POCITOS/S Bolivar","linea":"121"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.151298,-34.920019]},"properties":{"cod":"282","desc":"POCITOS/21 Setiembre","linea":"121"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.165236,-34.893288]},"properties":{"cod":"263","desc":"TRES CRUCES","linea":"CE1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.165234,-34.893485]},"properties":{"cod":"6705","desc":"TRES CRUCES","linea":"CE1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.193612,-34.906078]},"properties":{"cod":"12","desc":"PLAZA DEL ENTREVERO","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.211879,-34.862248]},"properties":{"cod":"45","desc":"PSO MOLINO L Obes","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.275688,-34.834829]},"properties":{"cod":"55","desc":"PASO DE LA ARENA","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.163293,-34.910979]},"properties":{"cod":"63","desc":"FTAD ARQUITECTURA","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.194602,-34.885969]},"properties":{"cod":"95","desc":"PALACIO DE LA LUZ","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.1918,-34.902144]},"properties":{"cod":"238","desc":"RONDEAU/Paysand\u00c3\u00ba","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.242812,-34.84218]},"properties":{"cod":"271","desc":"YUGOESLAVIA/S Luc\u00c3\u00ada","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.243362,-34.842844]},"properties":{"cod":"5984","desc":"JOSE LLUPES - YUGOESLAVIA","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.268018,-34.817893]},"properties":{"cod":"6525","desc":"UAM","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.268511,-34.818078]},"properties":{"cod":"6670","desc":"UAM","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.108008,-34.879237]},"properties":{"cod":"6689","desc":"IGUA","linea":"427"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.080569,-34.896051]},"properties":{"cod":"114","desc":"PUNTA GORDAGral Paz","linea":"D1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.174399,-34.907321]},"properties":{"cod":"118","desc":"E ACEVEDOConstyente","linea":"D1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.05787,-34.877322]},"properties":{"cod":"170","desc":"CARRASCO","linea":"D1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.108012,-34.895941]},"properties":{"cod":"303","desc":"MALVIN","linea":"D1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.135398,-34.909827]},"properties":{"cod":"531","desc":"POCITOSL A Herrera","linea":"D1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.05766,-34.877749]},"properties":{"cod":"6714","desc":"CARRASCO","linea":"D1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.159067,-34.840785]},"properties":{"cod":"104","desc":"C NACIONALES/Torric","linea":"199"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.153891,-34.844449]},"properties":{"cod":"145","desc":"G FLORES/C Nacionales","linea":"199"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.171674,-34.866903]},"properties":{"cod":"148","desc":"G FLORES L A Herrera","linea":"199"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.179358,-34.887238]},"properties":{"cod":"179","desc":"JUSTICIA/Am\u00c3\u00a9zaga","linea":"199"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.159737,-34.841437]},"properties":{"cod":"337","desc":"J POSOLO/Torricelli","linea":"199"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.154454,-34.845142]},"properties":{"cod":"338","desc":"G FLORES/J Posolo","linea":"199"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.209172,-34.865424]},"properties":{"cod":"43","desc":"AGRACIADAFco Gomez","linea":"128"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.222375,-34.854874]},"properties":{"cod":"97","desc":"BELVEDERE","linea":"128"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.266297,-34.876164]},"properties":{"cod":"109","desc":"C MA RAMIREZ/Cibils","linea":"128"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.169221,-34.911562]},"properties":{"cod":"156","desc":"PARQUE RODO","linea":"128"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.220462,-34.856043]},"properties":{"cod":"285","desc":"P MOLINO/J Freire","linea":"128"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.272438,-34.836256]},"properties":{"cod":"325","desc":"CNO TOMKINSON y AV LUIS BATLLE BERRES","linea":"128"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.214173,-34.861071]},"properties":{"cod":"5507","desc":"PSO MOLINO Viaducto","linea":"128"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.267763,-34.817868]},"properties":{"cod":"6677","desc":"UAM","linea":"128"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.275417,-34.835022]},"properties":{"cod":"6693","desc":"PASO DE LA ARENA","linea":"128"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.150033,-34.856082]},"properties":{"cod":"123","desc":"LARRA\u00c3\u0091AGA/Londres","linea":"330"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.176189,-34.899925]},"properties":{"cod":"209","desc":"BCO PREVISI\u00c3\u0093N SOCIAL","linea":"330"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.191614,-34.90401]},"properties":{"cod":"237","desc":"RONDEAU/Mercedes","linea":"330"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.156759,-34.818896]},"properties":{"cod":"381","desc":"MENDOZA/D Arena","linea":"330"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.162334,-34.806246]},"properties":{"cod":"6680","desc":"INSTRUCCIONES Y MENDOZA","linea":"330"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.162332,-34.806322]},"properties":{"cod":"6685","desc":"CNO PETIROSSI y AV DE LAS INSTRUCCIONES","linea":"330"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.199453,-34.904592]},"properties":{"cod":"6837","desc":"Ciudadela Circuito","linea":"330"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.180515,-34.903649]},"properties":{"cod":"9","desc":"PLAZA TREINTA Y TRES","linea":"409"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.193204,-34.88488]},"properties":{"cod":"38","desc":"PCIO LUZ/Aguilar","linea":"409"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.249842,-34.821271]},"properties":{"cod":"204","desc":"VERDISOL","linea":"409"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.26012,-34.788684]},"properties":{"cod":"205","desc":"AVIACI\u00c3\u0093N MELILLA","linea":"409"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.237829,-34.836851]},"properties":{"cod":"318","desc":"NVO PARISC Ma Pena","linea":"409"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.202906,-34.909149]},"properties":{"cod":"319","desc":"PLAZA ESPA\u00c3\u0091A","linea":"409"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.241573,-34.788614]},"properties":{"cod":"5974","desc":"HOSPITAL SAINT BOIS","linea":"409"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.249637,-34.821431]},"properties":{"cod":"5975","desc":"VERDISOL","linea":"409"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.247838,-34.796391]},"properties":{"cod":"5976","desc":"LEZICAGuanhany","linea":"409"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.251339,-34.874169]},"properties":{"cod":"98","desc":"CERROTerminal","linea":"137"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.269395,-34.860699]},"properties":{"cod":"110","desc":"LA BOYADA/Cno Cibils","linea":"137"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.250109,-34.87333]},"properties":{"cod":"390","desc":"TERMINAL CERRO","linea":"137"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.209153,-34.869963]},"properties":{"cod":"265","desc":"CAPURRO/Uruguayana","linea":"17"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.279511,-34.884513]},"properties":{"cod":"6828","desc":"TERMINAL CASABO","linea":"17"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200512,-34.827222]},"properties":{"cod":"112","desc":"PE\u00c3\u0091AROL","linea":"582"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.194787,-34.884116]},"properties":{"cod":"278","desc":"PCIO LUZ/Gral Luna","linea":"582"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.186057,-34.905614]},"properties":{"cod":"5940","desc":"INTENDENCIA DE MONTEVIDEO","linea":"582"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.185289,-34.904499]},"properties":{"cod":"6479","desc":"INTENDENCIA / J BARRIOS AMORIN y COLONIA","linea":"582"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.205792,-34.813082]},"properties":{"cod":"6580","desc":"PE\u00c3\u0091AROL","linea":"582"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.187579,-34.909438]},"properties":{"cod":"10","desc":"MALDONADO/A Lanza","linea":"407"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.122525,-34.872635]},"properties":{"cod":"370","desc":"CNO CARRASCO/Piran","linea":"407"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.294273,-34.890984]},"properties":{"cod":"189","desc":"SANTA CATALINA","linea":"124"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.194699,-34.885041]},"properties":{"cod":"216","desc":"PCIO DE LA LUZ","linea":"124"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.205242,-34.873111]},"properties":{"cod":"264","desc":"B ARTIGAS/Uruguayana","linea":"124"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.294244,-34.891109]},"properties":{"cod":"6709","desc":"SANTA CATALINA","linea":"124"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.259596,-34.903938]},"properties":{"cod":"173","desc":"PLAYA CERRODique","linea":"125"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.253811,-34.895572]},"properties":{"cod":"257","desc":"Playa del Cerro  Terminal","linea":"125"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.237968,-34.867606]},"properties":{"cod":"345","desc":"PLAZA LAFONE","linea":"125"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.267083,-34.872317]},"properties":{"cod":"111","desc":"CNO CIBILS/S Fuentes","linea":"133"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.339234,-34.870734]},"properties":{"cod":"190","desc":"PAJAS BLANCAS","linea":"133"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.365647,-34.843373]},"properties":{"cod":"250","desc":"CNO SANGUINETTI y CNO PAJAS BLANCAS","linea":"133"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.330867,-34.861051]},"properties":{"cod":"360","desc":"CNO P BLANCAS/Ibarra","linea":"133"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.318155,-34.878333]},"properties":{"cod":"5685","desc":"ESCUELA MONTERROSA","linea":"133"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.376152,-34.857768]},"properties":{"cod":"5691","desc":"CNO SANGUINETTI y (7138)","linea":"133"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.139146,-34.816908]},"properties":{"cod":"81","desc":"PDAS BLANCAS Repetto","linea":"169"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.161747,-34.85407]},"properties":{"cod":"149","desc":"AV GRAL FLORES","linea":"169"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.108784,-34.753204]},"properties":{"cod":"163","desc":"TOLEDO CHICO","linea":"169"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.13967,-34.819148]},"properties":{"cod":"230","desc":"DR BARTOLOME VIGNALE y AV JOSE BELLONI","linea":"169"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.152577,-34.842834]},"properties":{"cod":"333","desc":"G FLORES/Gronardo","linea":"169"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.186297,-34.861083]},"properties":{"cod":"91","desc":"L A HERRERA/Burgues","linea":"158"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.176967,-34.899238]},"properties":{"cod":"141","desc":"URUGUAY/F Crespo","linea":"158"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.186302,-34.881103]},"properties":{"cod":"243","desc":"S MARTIN/D Arambur\u00c3\u00ba","linea":"158"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.168044,-34.829945]},"properties":{"cod":"247","desc":"SAN MARTIN/O Bertani","linea":"158"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.187182,-34.902756]},"properties":{"cod":"262","desc":"AV URUGUAY/Ejido","linea":"158"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.175862,-34.847814]},"properties":{"cod":"528","desc":"CEMENTERIO DEL NORTE","linea":"158"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.354125,-34.787693]},"properties":{"cod":"71","desc":"BARRA STA LUCIA","linea":"127"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.369124,-34.761847]},"properties":{"cod":"524","desc":"DELTA DEL TIGRE","linea":"127"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.390149,-34.767403]},"properties":{"cod":"5672","desc":"RUTA 1 Km26","linea":"127"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.390322,-34.767534]},"properties":{"cod":"6710","desc":"RUTA 1 KM 26","linea":"127"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.170081,-34.848147]},"properties":{"cod":"121","desc":"SAN MARTIN/Chimborazo","linea":"156"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.148714,-34.837934]},"properties":{"cod":"150","desc":"HIP\u00c3\u0093DROMO","linea":"156"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.179063,-34.862892]},"properties":{"cod":"246","desc":"S MARTIN/L A Herrera","linea":"156"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.149025,-34.837888]},"properties":{"cod":"6712","desc":"HIPODROMO","linea":"156"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.117815,-34.79393]},"properties":{"cod":"46","desc":"ANDALUZ/Pso Espa\u00c3\u00b1ola","linea":"505"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.132575,-34.806689]},"properties":{"cod":"67","desc":"MANGA/Caoba_Aljaba","linea":"505"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.168524,-34.862591]},"properties":{"cod":"6074","desc":"G FLORESJ B Ordo\u00c3\u00b1ez","linea":"505"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.206423,-34.867961]},"properties":{"cod":"39","desc":"AV AGRACIADA/Capurro","linea":"524"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.244968,-34.856654]},"properties":{"cod":"47","desc":"TRES OMB\u00c3\u009aES","linea":"524"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.245328,-34.855999]},"properties":{"cod":"6604","desc":"TRES OMBUES","linea":"524"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.185767,-34.915469]},"properties":{"cod":"6477","desc":"EJIDO y RBLA REPUBLICA ARGENTINA","linea":"E14"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.160419,-34.914596]},"properties":{"cod":"6478","desc":"POCITOS/ 21 Set y Sarmiento","linea":"E14"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.216305,-34.872536]},"properties":{"cod":"34","desc":"RUTA 1/Pque Capurro","linea":"124 SD"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.197202,-34.904427]},"properties":{"cod":"393","desc":"MERCEDES/Convenci\u00c3\u00b3n","linea":"130"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.201787,-34.904115]},"properties":{"cod":"6885","desc":"CIUDADELA (CIRC)","linea":"130"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.222134,-34.805758]},"properties":{"cod":"155","desc":"PLAZA COLON","linea":"148"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.181738,-34.895813]},"properties":{"cod":"307","desc":"F CRESPOMiguelete","linea":"148"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.196373,-34.857912]},"properties":{"cod":"530","desc":"PARQUE POSADAS","linea":"148"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.26085,-34.78704]},"properties":{"cod":"5708","desc":"AVIACI\u00c3\u0093N MELILLA","linea":"148"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.234664,-34.805951]},"properties":{"cod":"6450","desc":"Parque Ambientalista","linea":"148"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.222035,-34.799809]},"properties":{"cod":"6694","desc":"TERMINAL COLON","linea":"148"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.233586,-34.80002]},"properties":{"cod":"87","desc":"COMPLEJO AM\u00c3\u0089RICA","linea":"147"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.202814,-34.82585]},"properties":{"cod":"251","desc":"PE\u00c3\u0091AROL","linea":"147"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.215135,-34.809211]},"properties":{"cod":"272","desc":"ZORRILLA/PzaLarrobla","linea":"147"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.19575,-34.860151]},"properties":{"cod":"6903","desc":"REYES y AV MILLAN","linea":"147"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.227646,-34.76866]},"properties":{"cod":"96","desc":"PUENTE LA PAZ","linea":"D5"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.187124,-34.888564]},"properties":{"cod":"270","desc":"FACULTAD MEDICINA","linea":"D5"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.185686,-34.876377]},"properties":{"cod":"248","desc":"SAN MARTIN/Vilardeb\u00c3\u00b3","linea":"456"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.194848,-34.885987]},"properties":{"cod":"6687","desc":"PCIO DE LA LUZ","linea":"CE2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.196431,-34.900607]},"properties":{"cod":"6898","desc":"GALICIA y RIO BRANCO","linea":"CE2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.144043,-34.910356]},"properties":{"cod":"229","desc":"POCITOS/M Pagola","linea":"181"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.152382,-34.881993]},"properties":{"cod":"526","desc":"LUIS A DE HERRERA Y 8 DE OCTUBRE","linea":"181"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.212832,-34.861124]},"properties":{"cod":"6179","desc":"PSO MOLINO VIADUCTO","linea":"181"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.152963,-34.881715]},"properties":{"cod":"7021","desc":"AV DR LUIS ALBERTO DE HERRERA","linea":"181"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.14641,-34.907921]},"properties":{"cod":"22","desc":"26 MARZO/M Pagola","linea":"405"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.140697,-34.875125]},"properties":{"cod":"29","desc":"UNION  Serrato","linea":"405"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.151737,-34.833795]},"properties":{"cod":"52","desc":"MENDOZA/ A Saravia","linea":"405"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.170154,-34.914072]},"properties":{"cod":"241","desc":"PARQUE RODO","linea":"405"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.133641,-34.858592]},"properties":{"cod":"315","desc":"8 OCT/ Marcos Sastre","linea":"405"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200652,-34.82807]},"properties":{"cod":"327","desc":"PE\u00c3\u0091AROL","linea":"405"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.170196,-34.913652]},"properties":{"cod":"5513","desc":"DR PABLO DE MARIA y DR LUIS PIERA","linea":"405"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.151655,-34.833788]},"properties":{"cod":"5973","desc":"MENDOZA/A Saravia","linea":"405"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.173393,-34.836006]},"properties":{"cod":"6397","desc":"CASAVALLE","linea":"405"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.134121,-34.865942]},"properties":{"cod":"24","desc":"8 OCT/Corrales","linea":"316"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.155998,-34.918945]},"properties":{"cod":"134","desc":"JOSE ELLAURI y 21 DE SETIEMBRE","linea":"316"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.156061,-34.903124]},"properties":{"cod":"254","desc":"AV RIVERA/Fco Soca","linea":"316"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.06781,-34.79133]},"properties":{"cod":"6679","desc":"Fac. de Veterinaria","linea":"316"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.067573,-34.791225]},"properties":{"cod":"6736","desc":"FACULTAD DE VETERINARIA","linea":"316"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.197094,-34.841074]},"properties":{"cod":"74","desc":"J B ORDO\u00c3\u0091EZ/Instruc","linea":"145"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.186479,-34.909327]},"properties":{"cod":"128","desc":"EJIDOMaldonado","linea":"145"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.16587,-34.913677]},"properties":{"cod":"6889","desc":"PARQUE ROD\u00c3\u0093","linea":"145"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.222006,-34.830397]},"properties":{"cod":"6978","desc":"SAYAGO","linea":"145"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.162482,-34.918485]},"properties":{"cod":"64","desc":"BR ARTIGAS/Zu\u00c3\u00b1iga","linea":"300"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.187452,-34.911617]},"properties":{"cod":"153","desc":"CEMENTERIO CENTRAL","linea":"300"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.1365,-34.780948]},"properties":{"cod":"5515","desc":"MANGA/Instr_Belloni","linea":"300"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.223122,-34.855557]},"properties":{"cod":"99","desc":"BELVEDERE","linea":"306"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.120876,-34.865964]},"properties":{"cod":"266","desc":"VERACIERTO/Spencer","linea":"306"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.202938,-34.856782]},"properties":{"cod":"367","desc":"L A HERRERA/J Bot\u00c3\u00a1nico","linea":"306"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.100258,-34.878994]},"properties":{"cod":"375","desc":"ZUM FELDE/Pit\u00c3\u00a1goras","linea":"306"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.037511,-34.875936]},"properties":{"cod":"5509","desc":"PTE CARRASCOBarradas","linea":"306"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.049138,-34.882946]},"properties":{"cod":"5803","desc":"GRAL NARI\u00c3\u0091O/Av Gral Rivera","linea":"306"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.099082,-34.885691]},"properties":{"cod":"6310","desc":"AV ITALIA y DR ALEJANDRO GALLINAL","linea":"306"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.130842,-34.873544]},"properties":{"cod":"102","desc":"CARRASCO/Raissignier","linea":"546"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.222332,-34.855994]},"properties":{"cod":"6607","desc":"BELVEDERE","linea":"546"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.267857,-34.891397]},"properties":{"cod":"131","desc":"CASAB\u00c3\u0093Liceo 50","linea":"185"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.174522,-34.870274]},"properties":{"cod":"144","desc":"BR ARTIGASG Flores","linea":"185"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.136604,-34.906737]},"properties":{"cod":"184","desc":"POCITOS  ITURRIAGA","linea":"185"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.211775,-34.862286]},"properties":{"cod":"286","desc":"PSO MOLINO L Obes","linea":"185"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.168941,-34.869875]},"properties":{"cod":"6318","desc":"DR JUAN CAMPISTEGUY y BV GRAL ARTIGAS","linea":"185"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.11263,-34.845139]},"properties":{"cod":"194","desc":"VISTA LINDA","linea":"115"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.112846,-34.844438]},"properties":{"cod":"6667","desc":"VISTA LINDA","linea":"115"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.166134,-34.894734]},"properties":{"cod":"6855","desc":"TRES CRUCES","linea":"115"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.166108,-34.894732]},"properties":{"cod":"6856","desc":"TRES CRUCES","linea":"115"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.115744,-34.831718]},"properties":{"cod":"320","desc":"BELLA ITALIA","linea":"404"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.12426,-34.841527]},"properties":{"cod":"5654","desc":"FLOR MARO\u00c3\u0091AS  Luis Braille","linea":"404"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.193869,-34.892416]},"properties":{"cod":"5655","desc":"TORRE ANTEL","linea":"404"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.124768,-34.841413]},"properties":{"cod":"6688","desc":"LIBIA y CNO MALDONADO","linea":"404"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.170439,-34.835739]},"properties":{"cod":"50","desc":"A SARAVIA/Burgues","linea":"328"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.160971,-34.853251]},"properties":{"cod":"235","desc":"G FLORES/Robinson","linea":"328"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.14612,-34.902842]},"properties":{"cod":"373","desc":"ZOOLOGICO/V Dolores","linea":"328"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.153719,-34.892312]},"properties":{"cod":"5534","desc":"ESTADIO CENTENARIO","linea":"328"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.161485,-34.925505]},"properties":{"cod":"369","desc":"PTA CARRETAS","linea":"192"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.213856,-34.860554]},"properties":{"cod":"40","desc":"PSO MOLINO Viaducto","linea":"195"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.120622,-34.897949]},"properties":{"cod":"127","desc":"BUCEOSda Donizetti","linea":"195"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.120818,-34.897914]},"properties":{"cod":"6605","desc":"BUCEO","linea":"195"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.12688,-34.822741]},"properties":{"cod":"231","desc":"PDRAS BLANCASRafael","linea":"L46"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.100204,-34.841826]},"properties":{"cod":"258","desc":"SUSANA PINTOS","linea":"L46"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.147338,-34.825692]},"properties":{"cod":"358","desc":"HELVECIA y AZOTEA DE LIMA","linea":"L46"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.122666,-34.829965]},"properties":{"cod":"6914","desc":"BV APARICIO SARAVIA y RAFAEL","linea":"L46"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.150544,-34.890194]},"properties":{"cod":"374","desc":"HOSPITAL CL\u00c3\u008dNICAS","linea":"370"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.151657,-34.911374]},"properties":{"cod":"88","desc":"AV BRASIL/26 Marzo","linea":"191"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.149379,-34.914129]},"properties":{"cod":"292","desc":"POCITOS/Av Brasil","linea":"191"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.182674,-34.882474]},"properties":{"cod":"361","desc":"ESTACI\u00c3\u0093N GOES","linea":"191"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.183162,-34.883343]},"properties":{"cod":"364","desc":"ESTACI\u00c3\u0093N GOES","linea":"191"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.222319,-34.838098]},"properties":{"cod":"5527","desc":"MARIA ORTICOCHEA y CORONILLA","linea":"L24"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.213071,-34.847677]},"properties":{"cod":"5529","desc":"M RAFFO/I Canarias","linea":"L24"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.221731,-34.838439]},"properties":{"cod":"5911","desc":"FACULTAD DE AGRONOMIA","linea":"L24"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.241991,-34.828859]},"properties":{"cod":"6213","desc":"COLEGIO MADRE PAULINA","linea":"L24"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.236724,-34.853445]},"properties":{"cod":"72","desc":"L B BERRES/Las Tunas","linea":"157"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.165094,-34.89273]},"properties":{"cod":"289","desc":"TRES CRUCES","linea":"157"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.355623,-34.829838]},"properties":{"cod":"213","desc":"SANGUINETTI/O\u00c2\u00b4Higgins","linea":"135"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.404943,-34.840072]},"properties":{"cod":"221","desc":"PUNTA ESPINILLO","linea":"135"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.391142,-34.767649]},"properties":{"cod":"5602","desc":"RUTA 1 Km 26","linea":"494"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.3513,-34.805323]},"properties":{"cod":"5820","desc":"CARCEL SANTIAGO VAZQUEZ COMPEN","linea":"494"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.391191,-34.767552]},"properties":{"cod":"6691","desc":"Ruta 1 Km 26","linea":"494"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.130863,-34.899743]},"properties":{"cod":"329","desc":"AV RIVERA/M Gonzalez","linea":"538"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.181721,-34.853239]},"properties":{"cod":"5739","desc":"J B ORDO\u00c3\u0091EZ/Burgues","linea":"538"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.249374,-34.873217]},"properties":{"cod":"6615","desc":"TERMINAL CERRO","linea":"L38"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.203858,-34.730641]},"properties":{"cod":"48","desc":"","linea":"175"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.165666,-34.790271]},"properties":{"cod":"214","desc":"MENDOZA/O Rodriguez","linea":"175"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.219293,-34.728039]},"properties":{"cod":"5560","desc":"LAS PIEDRAS","linea":"175"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.219277,-34.728301]},"properties":{"cod":"6713","desc":"LAS PIEDRAS","linea":"175"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.225036,-34.770012]},"properties":{"cod":"5274","desc":"ESCUELA ROGER BALET","linea":"G8"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.198169,-34.786252]},"properties":{"cod":"5822","desc":"CNO VILLARON/Cno Coronel Raiz","linea":"G8"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.233198,-34.787798]},"properties":{"cod":"6041","desc":"PORORO y FERNANDO MENCK","linea":"G8"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.222766,-34.799267]},"properties":{"cod":"6715","desc":"TERMINAL COLON","linea":"G8"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.17031,-34.849035]},"properties":{"cod":"245","desc":"SAN MARTIN/Hum","linea":"396"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.175151,-34.846721]},"properties":{"cod":"5518","desc":"CEMENTERIO NORTE","linea":"396"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.091719,-34.8946]},"properties":{"cod":"279","desc":"MALVINGallinal","linea":"526"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.232231,-34.815393]},"properties":{"cod":"328","desc":"CONCILIACI\u00c3\u0093N","linea":"526"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.190226,-34.871421]},"properties":{"cod":"5738","desc":"BR ARTIGAS/Millan","linea":"526"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.233577,-34.799747]},"properties":{"cod":"5907","desc":"COMPLEJO AMERICA","linea":"526"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.09234,-34.894774]},"properties":{"cod":"5910","desc":"MALVIN","linea":"526"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.191725,-34.900268]},"properties":{"cod":"192","desc":"LIBERTADOR/Galicia","linea":"151"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.15198,-34.890326]},"properties":{"cod":"331","desc":"HOSPITAL CL\u00c3\u008dNICAS","linea":"151"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.242095,-34.850602]},"properties":{"cod":"70","desc":"LUIS B BERRES/Ca\u00c3\u00b1as","linea":"L14"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.325532,-34.810111]},"properties":{"cod":"513","desc":"L B BERRES/Cno Gori","linea":"L1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.315358,-34.803817]},"properties":{"cod":"133","desc":"CAMALOTESCno Tapir","linea":"L5"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.321414,-34.830569]},"properties":{"cod":"188","desc":"LAS FLORES/ L Zamora","linea":"L5"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.330958,-34.887556]},"properties":{"cod":"387","desc":"PLAYA LOS CILINDROS","linea":"L19"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.286132,-34.848047]},"properties":{"cod":"5740","desc":"TOMKINSON/Las Flores","linea":"L19"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.332869,-34.869015]},"properties":{"cod":"6842","desc":"PAJAS BLANCAS","linea":"L16"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.297171,-34.804407]},"properties":{"cod":"187","desc":"E PEREZL Orientales","linea":"L7"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.271279,-34.851651]},"properties":{"cod":"321","desc":"CNO CIBILS/Ruta 1","linea":"L7"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.279552,-34.864302]},"properties":{"cod":"5977","desc":"Barrio COTRAVI","linea":"L7"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.216671,-34.868502]},"properties":{"cod":"176","desc":"CAPURRO/Rep Francesa","linea":"163"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.180898,-34.879045]},"properties":{"cod":"302","desc":"G FLORES/Guadalupe","linea":"163"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.181816,-34.878779]},"properties":{"cod":"311","desc":"MARCELINO SOSA y GUADALUPE","linea":"163"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.271756,-34.849189]},"properties":{"cod":"339","desc":"CIBILS/Los Cedros","linea":"L6"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.313026,-34.816575]},"properties":{"cod":"6109","desc":"LUIS BATLLE BERRES","linea":"L39"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.323853,-34.801143]},"properties":{"cod":"6630","desc":"CNO PAURU y DEL TRANVIA A LA BARRA","linea":"L39"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.131706,-34.892116]},"properties":{"cod":"6507","desc":"BUCEO/A AGUIAR y PTE ORIBE","linea":"143"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.147685,-34.912493]},"properties":{"cod":"5675","desc":"POCITOS/R Massini","linea":"71"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.165161,-34.894402]},"properties":{"cod":"5944","desc":"SHOPPING TRES CRUCES","linea":"183"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.163202,-34.9107]},"properties":{"cod":"6988","desc":"BV GRAL ARTIGAS y BV ESPA\u00c3\u0091A","linea":"183"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.158756,-34.850602]},"properties":{"cod":"122","desc":"G FLORES/Chimborazo","linea":"329"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200405,-34.824306]},"properties":{"cod":"312","desc":"PE\u00c3\u0091AROL","linea":"329"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.164416,-34.914297]},"properties":{"cod":"6052","desc":"Museo Artes Visuales","linea":"M-A"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.15907,-34.928176]},"properties":{"cod":"6053","desc":"Museo Zorila de San Martin","linea":"M-A"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.12389,-34.903121]},"properties":{"cod":"6055","desc":"Museo D A Larra\u00c3\u00b1aga","linea":"M-A"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.135891,-34.911002]},"properties":{"cod":"6697","desc":"MUSEO NAVAL","linea":"M-A"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.168921,-34.9183]},"properties":{"cod":"6443","desc":"TEATRO DE VERANO","linea":"CARNAVAL"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.168653,-34.918673]},"properties":{"cod":"6704","desc":"TEATRO DE VERANO","linea":"CARNAVAL"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.299728,-34.765442]},"properties":{"cod":"68","desc":"C AZAROLA/Redenci\u00c3\u00b3n","linea":"G10"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.27548,-34.750875]},"properties":{"cod":"69","desc":"AZAROLA/Cno Melilla","linea":"G10"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.318793,-34.740549]},"properties":{"cod":"125","desc":"Buxareo/C Redenci\u00c3\u00b3n","linea":"G10"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.288666,-34.723177]},"properties":{"cod":"201","desc":"MELILLA/Cno Buxareo","linea":"G10"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.253537,-34.80553]},"properties":{"cod":"126","desc":"MELILLA/Redenci\u00c3\u00b3n","linea":"G11"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.210648,-34.813521]},"properties":{"cod":"152","desc":"CNO MANUEL FORTET y HUDSON","linea":"L29"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.235532,-34.78158]},"properties":{"cod":"5817","desc":"SDA 6 y PSJE C","linea":"L29"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.213079,-34.858556]},"properties":{"cod":"5876","desc":"SANTA LUCIA y CNO CASTRO","linea":"L29"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.221939,-34.854376]},"properties":{"cod":"6781","desc":"PASO MOLINO","linea":"L29"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.219171,-34.777556]},"properties":{"cod":"92","desc":"CALPINO/O Rodriguez","linea":"150"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.192408,-34.811525]},"properties":{"cod":"113","desc":"CNO CNEL RAIZ/Colman","linea":"150"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.21607,-34.741664]},"properties":{"cod":"511","desc":"LA PILARICA","linea":"150"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.094065,-34.737162]},"properties":{"cod":"510","desc":"TOLEDO/Ruta 6","linea":"L13"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.12568,-34.791213]},"properties":{"cod":"6222","desc":"CNO BENITO BERGES y EL JARDIN","linea":"L32"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.134793,-34.776628]},"properties":{"cod":"6617","desc":"Transatl\u00c3\u00a1ntico","linea":"L32"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.133656,-34.776547]},"properties":{"cod":"6623","desc":"TRASATL\u00c3\u0081NTICO","linea":"L32"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.136056,-34.805176]},"properties":{"cod":"6890","desc":"MANGA CARLOS A LOPEZ","linea":"L32"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.127932,-34.788225]},"properties":{"cod":"6629","desc":"CIRILO","linea":"L33"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.116284,-34.804509]},"properties":{"cod":"220","desc":"BARRIO CAPRA","linea":"L22"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.116306,-34.79708]},"properties":{"cod":"6565","desc":"NUEVOS RUMBOS","linea":"L25"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.061023,-34.849662]},"properties":{"cod":"5780","desc":"CNO SERVANDO GOMEZ y CNO GIGANTES","linea":"L20"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.058449,-34.869257]},"properties":{"cod":"6593","desc":"ARQ HORACIO ACOSTA Y LARA y CONSTANCIO C VIGIL","linea":"L20"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.1446,-34.833033]},"properties":{"cod":"143","desc":"G FLORES/A Saravia","linea":"155"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.191068,-34.899297]},"properties":{"cod":"193","desc":"AV LIBERTADOR/La Paz","linea":"155"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.126103,-34.838865]},"properties":{"cod":"5840","desc":"LIBIA - JAEN","linea":"155"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.182379,-34.871321]},"properties":{"cod":"6396","desc":"AV GRAL SAN MARTIN y BV GRAL ARTIGAS","linea":"155"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.088485,-34.8193]},"properties":{"cod":"6503","desc":"SBRE BO NUEVA ESPA\u00c3\u0091A y PSJE CORU\u00c3\u0091A","linea":"155"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.099026,-34.822079]},"properties":{"cod":"6707","desc":"PUNTA RIELES","linea":"155"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.098916,-34.822078]},"properties":{"cod":"6909","desc":"PUNTA RIELES","linea":"155"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.239546,-34.872897]},"properties":{"cod":"157","desc":"LA TEJA/Esc Mar\u00c3\u00adtima","linea":"L26"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.100095,-34.823627]},"properties":{"cod":"105","desc":"PUNTA RIELES","linea":"L30"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.090256,-34.837103]},"properties":{"cod":"362","desc":"CARCEL PUNTA DE RIELES","linea":"L30"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.092273,-34.831456]},"properties":{"cod":"5669","desc":"PUNTA RIELESGkn","linea":"L30"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.100213,-34.823993]},"properties":{"cod":"7032","desc":"CNO GUERRA y LEO","linea":"L30"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.375292,-34.85662]},"properties":{"cod":"6717","desc":"LA COLORADA","linea":"L15"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.152417,-34.868038]},"properties":{"cod":"124","desc":"LARRA\u00c3\u0091AGA/Parma","linea":"79"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.178549,-34.894028]},"properties":{"cod":"305","desc":"JUSTICIA/Miguelete","linea":"79"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.144052,-34.856587]},"properties":{"cod":"366","desc":"CNO CORRALES y CALLAO","linea":"79"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.25831,-34.886527]},"properties":{"cod":"483","desc":"FORTALEZA DEL CERRO","linea":"L12"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.268781,-34.896913]},"properties":{"cod":"5760","desc":"CALLE ESTE y CALLE B","linea":"L12"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.257652,-34.886743]},"properties":{"cod":"7020","desc":"Balc\u00c3\u00b3n del Cerro","linea":"L8"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.112774,-34.848979]},"properties":{"cod":"6668","desc":"SANTIAGO ARRIETA y MTRA JUANA MANSO","linea":"L41"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.114298,-34.825524]},"properties":{"cod":"6789","desc":"BV APARICIO SARAVIA y FELISBERTO HERNANDEZ","linea":"L9"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.237677,-34.839011]},"properties":{"cod":"6887","desc":"GRAL HORNOS y CARLOS ANGEL GARRE","linea":"L3"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.254892,-34.858807]},"properties":{"cod":"260","desc":"LA BOYADA","linea":"L4"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.055126,-34.889267]},"properties":{"cod":"288","desc":"HOTEL CARRASCO","linea":"BT2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.159572,-34.923232]},"properties":{"cod":"5947","desc":"SHOPPING PUNTA CARRETAS","linea":"BT2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.169119,-34.916116]},"properties":{"cod":"5948","desc":"PARQUE ROD\u00c3\u0093","linea":"BT2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.138763,-34.910084]},"properties":{"cod":"6727","desc":"RBLA REPUBLICA DEL PERU y RBLA PTE CHARLES DE GAULLE","linea":"BT2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.103883,-34.896358]},"properties":{"cod":"6941","desc":"PLAYA MALVIN","linea":"BT2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.05516,-34.889204]},"properties":{"cod":"6967","desc":"HOTEL CARRASCO","linea":"BT2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.137771,-34.902958]},"properties":{"cod":"6968","desc":"MONTEVIDEO SHOPPING","linea":"BT2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.16913,-34.916086]},"properties":{"cod":"6969","desc":"PARQUE ROD\u00c3\u0093","linea":"BT2"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.22567,-34.8408]},"properties":{"cod":"6103","desc":"AV ISLAS CANARIAS y CORONILLA","linea":"L28"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.180863,-34.895324]},"properties":{"cod":"6061","desc":"MUSEO -ESPACIO ARTE CONTEMPORANEO","linea":"M-B"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.197266,-34.852896]},"properties":{"cod":"6062","desc":"MUSEO BLANES","linea":"M-B"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.197937,-34.841684]},"properties":{"cod":"6063","desc":"MUSEO DE LA MEMORIA","linea":"M-B"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200695,-34.844466]},"properties":{"cod":"6064","desc":"MUSEO ANTROPOLIGICO","linea":"M-B"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.176577,-34.863923]},"properties":{"cod":"6334","desc":"QUINTA DE HERRERA","linea":"M-B"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.21182,-34.86247]},"properties":{"cod":"6342","desc":"MUSEO DEL HOTEL","linea":"M-B"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200888,-34.906749]},"properties":{"cod":"6703","desc":"PUERTA DE LA CIUDADELA","linea":"M-B"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.211287,-34.904989]},"properties":{"cod":"5934","desc":"MERCADO DEL PUERTO","linea":"BT1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.211202,-34.904959]},"properties":{"cod":"5935","desc":"MERCADO DEL PUERTO","linea":"BT1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.20092,-34.857149]},"properties":{"cod":"5943","desc":"JARDIN BOTANICO","linea":"BT1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.151395,-34.893578]},"properties":{"cod":"5945","desc":"ESTADIO CENTENARIO","linea":"BT1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.183928,-34.886762]},"properties":{"cod":"6135","desc":"MERCADO AGRICOLA DE MONTEVIDEO","linea":"BT1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.204791,-34.862795]},"properties":{"cod":"6960","desc":"ROSEDAL","linea":"BT1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.177485,-34.902587]},"properties":{"cod":"6962","desc":"BIBLIOTECA NACIONAL","linea":"BT1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.200954,-34.857144]},"properties":{"cod":"6970","desc":"JARDIN BOTANICO","linea":"BT1"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.220272,-34.819566]},"properties":{"cod":"5856","desc":"CNO EDISON y AV GRAL EUGENIO GARZON","linea":"G3"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.220391,-34.819489]},"properties":{"cod":"6910","desc":"CNO EDISON y AV GRAL EUGENIO GARZON","linea":"G3"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.349655,-34.786886]},"properties":{"cod":"6932","desc":"LOS HUMEDALES","linea":"BT4"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.332524,-34.794239]},"properties":{"cod":"6935","desc":"PARQUE LECOCQ","linea":"BT4"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.224022,-34.787707]},"properties":{"cod":"6955","desc":"BODEGA CARRAU","linea":"BT4"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.224607,-34.795787]},"properties":{"cod":"6956","desc":"BODEGA SANTA ROSA","linea":"BT4"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.221644,-34.807362]},"properties":{"cod":"6976","desc":"BODEGA FALLABRINO","linea":"BT4"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.259558,-34.889315]},"properties":{"cod":"6930","desc":"FORTALEZA CERRO","linea":"BT3"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.253922,-34.895604]},"properties":{"cod":"6939","desc":"PLAYA DEL CERRO","linea":"BT3"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.259582,-34.889331]},"properties":{"cod":"6971","desc":"FORTALEZA CERRO","linea":"BT3"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.166273,-34.787554]},"properties":{"cod":"6218","desc":"AV DON PEDRO DE MENDOZA y CNO CARLOS LINNEO","linea":"L31"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.162168,-34.806116]},"properties":{"cod":"6639","desc":"CNO PETIROSSI y AV DE LAS INSTRUCCIONES","linea":"L31"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.170939,-34.79815]},"properties":{"cod":"6640","desc":"21 DE ENERO","linea":"L31"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.135961,-34.789177]},"properties":{"cod":"6642","desc":"AV JOSE BELLONI y CNO ANTARES","linea":"L31"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-56.136455,-34.781329]},"properties":{"cod":"6664","desc":"AV JOSE BELLONI y AV DE LAS INSTRUCCIONES","linea":"L31"}}]};
+
+function renderControles(){
+  if(!controlesLayer) return;
+  controlesLayer.clearLayers();
+  CONTROLES_DATA.features.forEach(function(f){
+    var c=f.geometry.coordinates, p=f.properties;
+    var icon=L.divIcon({
+      className:'',
+      html:'<div style="width:8px;height:8px;border-radius:2px;background:#4f80ff;border:1.5px solid rgba(255,255,255,0.5);transform:rotate(45deg);"></div>',
+      iconSize:[8,8],iconAnchor:[4,4]
+    });
+    var m=L.marker([c[1],c[0]],{icon:icon,zIndexOffset:-100});
+    m.bindPopup(
+      '<div style="font-family:DM Sans,sans-serif;font-size:13px;min-width:140px;">'
+      +'<b style="color:#4f80ff;">📍 Punto de control</b><br>'
+      +'<span style="color:#7a7f8e;font-size:12px;">'+p.desc+'</span><br>'
+      +'<span style="color:#7a7f8e;font-size:11px;">Línea: '+p.linea+' · Cod: '+p.cod+'</span>'
+      +'</div>',{maxWidth:180}
+    );
+    controlesLayer.addLayer(m);
+  });
+}
+
+function initMap(){
+  if(map) return;
+  map=L.map('map',{zoomControl:true}).setView([-34.9011,-56.1645],12);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    attribution:'© OpenStreetMap © CARTO',maxZoom:19,subdomains:'abcd'
+  }).addTo(map);
+  layerGroup=L.layerGroup().addTo(map);
+  // Puntos de control layer
+  controlesLayer=L.layerGroup().addTo(map);
+  renderControles();
+  setTimeout(function(){map.invalidateSize();},200);
+}
+
+function applyFilters(){
+  var empresa=document.getElementById('f-empresa').value;
+  var linea=document.getElementById('f-linea').value;
+  var search=document.getElementById('f-search').value.trim().toLowerCase();
+  filtered=allData.filter(function(f){
+    var p=f.properties;
+    if(currentTab!=='all'&&f._cat!==currentTab) return false;
+    if(empresa&&String(p.empresa)!==empresa) return false;
+    if(linea&&p.linea!==linea) return false;
+    if(search&&!String(p.codigoBus).includes(search)&&!String(p.linea).toLowerCase().includes(search)) return false;
+    return true;
+  });
+  updateMetrics();renderTable();renderMap();
+}
+
+function updateMetrics(){
+  var total=allData.length,cats={ok:0,late:0,early:0,bad:0,ng:0};
+  allData.forEach(function(f){var c=f._cat;if(cats[c]!==undefined)cats[c]++;else cats.bad++;});
+  document.getElementById('m-total').textContent=total;
+  document.getElementById('p-total').textContent=new Date().toLocaleDateString('es-UY');
+  document.getElementById('m-ok').textContent=cats.ok;document.getElementById('p-ok').textContent=pct(cats.ok,total);
+  document.getElementById('m-late').textContent=cats.late+cats.bad;document.getElementById('p-late').textContent=pct(cats.late+cats.bad,total);
+  document.getElementById('m-early').textContent=cats.early;document.getElementById('p-early').textContent=pct(cats.early,total);
+  document.getElementById('m-ng').textContent=cats.ng;document.getElementById('p-ng').textContent=pct(cats.ng,total);
+  document.getElementById('fcount').textContent=filtered.length+' buses';
+  document.getElementById('tp-count').textContent=filtered.length;
+}
+
+function setTab(tab,el){
+  currentTab=tab;
+  document.querySelectorAll('.metric').forEach(function(m){m.classList.remove('active');});
+  el.classList.add('active');syncSF(tab);
+  var labels={all:'Todos los buses',ok:'En horario',bad:'Fuera de hora',ng:'Sin GPS'};
+  document.getElementById('tp-title').textContent=labels[tab];
+  applyFilters();
+}
+
+function setSF(state,el){
+  currentTab=state;
+  document.querySelectorAll('.sf-btn').forEach(function(b){b.classList.remove('active');});
+  el.classList.add('active');
+  document.querySelectorAll('.metric').forEach(function(m){m.classList.remove('active');});
+  var m2={all:'tab-all',ok:'tab-ok',bad:'tab-bad',ng:'tab-ng'};
+  var t=document.getElementById(m2[state]);if(t)t.classList.add('active');
+  var labels={all:'Todos los buses',ok:'En horario',bad:'Fuera de hora',ng:'Sin GPS'};
+  document.getElementById('tp-title').textContent=labels[state];
+  applyFilters();
+}
+function syncSF(state){
+  document.querySelectorAll('.sf-btn').forEach(function(b){b.classList.remove('active');});
+  var sfMap={all:'sf-all',ok:'sf-ok',bad:'sf-bad',ng:'sf-ng'};
+  var el=document.getElementById(sfMap[state]);if(el)el.classList.add('active');
+}
+
+function sortBy(col){
+  if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=1;}
+  document.querySelectorAll('.sa').forEach(function(a){a.textContent='';});
+  var el=document.getElementById('sa-'+col);if(el)el.textContent=sortDir===1?' ↑':' ↓';
+  renderTable();
+}
+
+function renderTable(){
+  var sorted=[...filtered].sort(function(a,b){
+    var pa=a.properties,pb=b.properties,va,vb;
+    if(sortCol==='linea'){va=pa.linea||'';vb=pb.linea||'';}
+    else if(sortCol==='bus'){va=pa.codigoBus||0;vb=pb.codigoBus||0;}
+    else if(sortCol==='estado'){va=a._cat;vb=b._cat;}
+    else if(sortCol==='frecuencia'){va=pa.frecuencia||9999999;vb=pb.frecuencia||9999999;}
+    if(va<vb)return -1*sortDir;if(va>vb)return 1*sortDir;return 0;
+  });
+  var tbody=document.getElementById('bus-tbody');
+  if(!sorted.length){tbody.innerHTML='<tr class="empty-row"><td colspan="4">Sin resultados</td></tr>';return;}
+  tbody.innerHTML=sorted.map(function(f){
+    var p=f.properties,cat=f._cat,color=getColor(cat);
+    var coords=f.geometry?f.geometry.coordinates:null;
+    var lat=coords?coords[1]:0,lng=coords?coords[0]:0;
+    return '<tr onclick="focusBus('+lat+','+lng+')">'
+      +'<td class="mono"><span class="cbar" style="background:'+color+';"></span>'+p.linea+'</td>'
+      +'<td class="mono">#'+p.codigoBus+'</td>'
+      +'<td><span class="badge '+getBadge(cat)+'">'+getLabel(cat)+(p._atraso_min!==null&&p._atraso_min!==undefined?' ('+p._atraso_min+'min)':'')+'</span></td>'
+      +'<td class="mono">'+fmtMs(p.frecuencia)+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+function renderMap(){
+  if(!layerGroup) return;
+  layerGroup.clearLayers();
+  filtered.forEach(function(f){
+    if(!f.geometry) return;
+    var c=f.geometry.coordinates,p=f.properties,cat=f._cat,color=CAT_COLOR[cat];
+    var icon=L.divIcon({
+      className:'',
+      html:'<div style="width:10px;height:10px;border-radius:50%;background:'+color+';box-shadow:0 0 5px '+color+'99;border:1.5px solid rgba(255,255,255,0.35);"></div>',
+      iconSize:[10,10],iconAnchor:[5,5]
+    });
+    var marker=L.marker([c[1],c[0]],{icon:icon});
+    marker.bindPopup(
+      '<div style="font-family:DM Sans,sans-serif;min-width:140px;font-size:13px;">'
+      +'<b style="font-family:DM Mono,monospace;font-size:15px;">Línea '+p.linea+'</b><br>'
+      +'<span style="color:#7a7f8e;font-size:12px;">Bus #'+p.codigoBus+' · Var. '+p.variante+'</span><br>'
+      +'<span style="color:'+color+';font-weight:500;">● '+getLabel(cat)+(p._atraso_min!==null&&p._atraso_min!==undefined?' ('+p._atraso_min+' min)':'')+'</span><br>'
+      +'<span style="color:#7a7f8e;font-size:11px;">Señal hace: '+fmtMs(p.frecuencia)+(p._control?'<br>Control: '+p._control:'')+(p._hora_teorica?'<br>Horario teórico: '+p._hora_teorica:'')+'</span>'
+      +'</div>',{maxWidth:190}
+    );
+    layerGroup.addLayer(marker);
+  });
+}
+
+var showControles=true;
+function toggleControles(){
+  showControles=!showControles;
+  var btn=document.getElementById('btn-ctrl');
+  if(showControles){
+    if(map&&controlesLayer) controlesLayer.addTo(map);
+    btn.style.background='rgba(79,128,255,0.15)';btn.style.color='#4f80ff';
+  } else {
+    if(map&&controlesLayer) map.removeLayer(controlesLayer);
+    btn.style.background='transparent';btn.style.color='var(--mu)';
+  }
+}
+
+function exportCSV() {
+  var now = new Date();
+  var fecha = now.toLocaleDateString('es-UY');
+  var hora = now.toLocaleTimeString('es-UY');
+
+  var headers = ['Fecha','Hora','Linea','Empresa','Bus','Variante','Estado',
+    'Atraso_min','Punto_control','Hora_teorica','Dist_control_m','Lat','Lng','Senal_ms'];
+
+  var rows = filtered.map(function(f) {
+    var p = f.properties;
+    var coords = f.geometry ? f.geometry.coordinates : [null, null];
+    var vals = [
+      fecha,
+      hora,
+      p.linea != null ? p.linea : '',
+      p.empresa != null ? (EMPRESAS[p.empresa] || p.empresa) : '',
+      p.codigoBus != null ? p.codigoBus : '',
+      p.variante != null ? p.variante : '',
+      getLabel(f._cat || p._cat || 'ng'),
+      p._atraso_min != null ? p._atraso_min : '',
+      p._control != null ? p._control : '',
+      p._hora_teorica != null ? p._hora_teorica : '',
+      p._dist_m != null ? p._dist_m : '',
+      coords[1] != null ? coords[1] : '',
+      coords[0] != null ? coords[0] : '',
+      p.frecuencia != null ? p.frecuencia : ''
+    ];
+    return vals.map(function(v) {
+      return String(v).replace(/"/g, '""');
+    }).join(',');
+  });
+
+  var csv = [headers.join(',')].concat(rows).join('\n');
+  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'buses-stm-' + now.toISOString().slice(0,16).replace(/[T:]/g,'-') + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function focusBus(lat,lng){if(map&&lat&&lng)map.setView([lat,lng],16);}
+
+function resetDashboard(){
+  clearAuto();
+  allData=[];filtered=[];
+  document.getElementById('dashboard').classList.remove('on');
+  document.getElementById('upload-screen').style.display='flex';
+  document.getElementById('file-input').value='';
+  document.getElementById('auto-select').value='0';
+  document.getElementById('auto-badge').textContent='—';
+  document.getElementById('auto-badge').className='auto-badge auto-off';
+  document.getElementById('progress-fill').style.width='0%';
+  if(layerGroup)layerGroup.clearLayers();
+}
+</script>
+</body>
+</html>
