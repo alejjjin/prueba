@@ -16,6 +16,18 @@ try {
   console.log('STM data not found:', e.message);
 }
 
+// Registro en memoria de salidas reales detectadas.
+// key: "linea|codigoBus" -> { realTs, realSeg, teoricaSeg }
+const departures = {};
+
+// Override opcional de cuál es el "primer punto de control" (cabecera) por línea.
+// La lista controles[linea] viene ordenada por código, NO por orden de recorrido,
+// así que si querés fijar la cabecera real de una línea, poné aquí su código de control.
+// Ej: ORIGEN_CONTROL['G'] = '5854';
+const ORIGEN_CONTROL = {
+  // 'linea': 'codControl',
+};
+
 // Haversine distance in meters
 function distM(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -104,6 +116,119 @@ function classifyBus(feature) {
   return { cat: 'ok', atraso_min: null, control: null, hora_teorica: null };
 }
 
+// ---- Salida real / teórica (pasada por el primer punto de control) ----
+
+const TERMINAL_RADIUS = 250;      // m: cuán cerca del primer control para contar "pasada"
+const DEP_MATCH_WINDOW = 45 * 60; // s: ventana para emparejar con un horario teórico
+const TRIP_GAP = 25 * 60;         // s: separación mínima para considerar un viaje nuevo
+const DEP_TTL = 6 * 3600 * 1000;  // ms: limpiar salidas más viejas que esto
+
+// Primer punto de control (cabecera) de la línea
+function firstControl(linea) {
+  const arr = STM_DATA && STM_DATA.controles[linea];
+  if (!arr || !arr.length) return null;
+  const cod = ORIGEN_CONTROL[linea];
+  if (cod) {
+    const found = arr.find(c => String(c.c) === String(cod));
+    if (found) return found;
+  }
+  return arr[0];
+}
+
+// Horario teórico de pasada por ese control más cercano a la hora actual (dentro de la ventana)
+function closestTheoreticalDeparture(linea, day, cod, nowSeg, windowSeg) {
+  const lh = STM_DATA.horarios[linea];
+  if (!lh) return null;
+  const dh = lh[day];
+  if (!dh) return null;
+  const horas = dh[cod];
+  if (!horas || !horas.length) return null;
+  let best = null, bestDiff = Infinity;
+  for (const h of horas) {
+    let diff = Math.abs(h - nowSeg);
+    if (diff > 12 * 3600) diff = 24 * 3600 - diff; // wrap de medianoche
+    if (diff < bestDiff) { bestDiff = diff; best = h; }
+  }
+  if (windowSeg != null && bestDiff > windowSeg) return null;
+  return best;
+}
+
+function fmtSegHM(seg) {
+  const s = ((seg % 86400) + 86400) % 86400;
+  const hh = Math.floor(s / 3600).toString().padStart(2, '0');
+  const mm = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+function fmtSegHMS(seg) {
+  const s = ((seg % 86400) + 86400) % 86400;
+  const hh = Math.floor(s / 3600).toString().padStart(2, '0');
+  const mm = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
+  const ss = Math.floor(s % 60).toString().padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+// Detecta la pasada por el primer punto de control y guarda la salida real.
+// Luego adjunta _salida_real / _salida_teorica / _salida_atraso_min al feature,
+// que se mantienen durante todo el viaje (aunque el bus ya no esté en la cabecera).
+function recordDeparture(feature) {
+  const p = feature.properties;
+  if (!STM_DATA || p.linea == null) return;
+  const coords = feature.geometry ? feature.geometry.coordinates : null;
+  if (!coords) return;
+
+  const linea = String(p.linea);
+  const fc = firstControl(linea);
+  if (!fc) return;
+
+  const now = new Date();
+  const nowTs = now.getTime();
+  const nowSeg = ((now.getUTCHours() - 3 + 24) % 24) * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds();
+  const wd = new Date(nowTs - 3 * 3600 * 1000).getUTCDay();
+  const day = (wd === 0) ? '2' : (wd === 6) ? '1' : '0';
+
+  const key = linea + '|' + (p.codigoBus != null ? p.codigoBus : '?');
+  let rec = departures[key];
+
+  const d = distM(coords[1], coords[0], fc.la, fc.lo);
+  if (d <= TERMINAL_RADIUS) {
+    const teoricaSeg = closestTheoreticalDeparture(linea, day, fc.c, nowSeg, DEP_MATCH_WINDOW);
+    const isNewTrip = !rec
+      || (teoricaSeg != null && rec.teoricaSeg != null && Math.abs(teoricaSeg - rec.teoricaSeg) > 10 * 60)
+      || (nowTs - rec.realTs > TRIP_GAP * 1000);
+    if (isNewTrip) {
+      rec = departures[key] = {
+        realTs: nowTs,
+        realSeg: nowSeg,
+        teoricaSeg: (teoricaSeg != null ? teoricaSeg : null)
+      };
+    }
+  }
+
+  if (rec) {
+    p._salida_real = fmtSegHMS(rec.realSeg);
+    p._salida_teorica = (rec.teoricaSeg != null) ? fmtSegHM(rec.teoricaSeg) : null;
+    if (rec.teoricaSeg != null) {
+      let diff = rec.realSeg - rec.teoricaSeg;
+      if (diff > 12 * 3600) diff -= 24 * 3600;
+      if (diff < -12 * 3600) diff += 24 * 3600;
+      p._salida_atraso_min = Math.round(diff / 60 * 10) / 10;
+    } else {
+      p._salida_atraso_min = null;
+    }
+  } else {
+    p._salida_real = null;
+    p._salida_teorica = null;
+    p._salida_atraso_min = null;
+  }
+}
+
+function pruneDepartures() {
+  const cutoff = Date.now() - DEP_TTL;
+  for (const k in departures) {
+    if (departures[k].realTs < cutoff) delete departures[k];
+  }
+}
+
 // Main API endpoint
 app.post('/api/buses', async (req, res) => {
   try {
@@ -124,7 +249,9 @@ app.post('/api/buses', async (req, res) => {
         f.properties._control = info.control;
         f.properties._hora_teorica = info.hora_teorica;
         f.properties._dist_m = info.dist_m;
+        recordDeparture(f);
       }
+      pruneDepartures();
     }
 
     res.json(data);

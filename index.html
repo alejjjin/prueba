@@ -606,7 +606,7 @@ function renderMap(){
       +'<b style="font-family:DM Mono,monospace;font-size:15px;">Línea '+p.linea+'</b><br>'
       +'<span style="color:#7a7f8e;font-size:12px;">Bus #'+p.codigoBus+' · Var. '+p.variante+'</span><br>'
       +'<span style="color:'+color+';font-weight:500;">● '+getLabel(cat)+(p._atraso_min!==null&&p._atraso_min!==undefined?' ('+p._atraso_min+' min)':'')+'</span><br>'
-      +'<span style="color:#7a7f8e;font-size:11px;">Señal hace: '+fmtMs(p.frecuencia)+(p._control?'<br>Control: '+p._control:'')+(p._hora_teorica?'<br>Horario teórico: '+p._hora_teorica:'')+'</span>'
+      +'<span style="color:#7a7f8e;font-size:11px;">Señal hace: '+fmtMs(p.frecuencia)+(p._control?'<br>Control: '+p._control:'')+(p._hora_teorica?'<br>Horario teórico: '+p._hora_teorica:'')+(p._salida_real?'<br>Salida real: '+p._salida_real+(p._salida_teorica?' (teórica '+p._salida_teorica+')':''):'')+'</span>'
       +'</div>',{maxWidth:190}
     );
     layerGroup.addLayer(marker);
@@ -631,7 +631,8 @@ function exportCSV() {
   var fecha = now.toLocaleDateString('es-UY');
   var hora = now.toLocaleTimeString('es-UY');
 
-  var headers = ['Fecha','Hora','Linea','Empresa','Bus','Variante','Estado',
+  var headers = ['Fecha','Hora','Linea','Empresa','Bus','Variante',
+    'Salida_real','Salida_teorica','Salida_atraso_min','Estado',
     'Atraso_min','Punto_control','Hora_teorica','Dist_control_m','Lat','Lng','Senal_ms'];
 
   var rows = filtered.map(function(f) {
@@ -644,6 +645,9 @@ function exportCSV() {
       p.empresa != null ? (EMPRESAS[p.empresa] || p.empresa) : '',
       p.codigoBus != null ? p.codigoBus : '',
       p.variante != null ? p.variante : '',
+      p._salida_real != null ? p._salida_real : '',
+      p._salida_teorica != null ? p._salida_teorica : '',
+      p._salida_atraso_min != null ? p._salida_atraso_min : '',
       getLabel(f._cat || p._cat || 'ng'),
       p._atraso_min != null ? p._atraso_min : '',
       p._control != null ? p._control : '',
