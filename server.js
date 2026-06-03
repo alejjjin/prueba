@@ -278,36 +278,63 @@ function pruneDepartures() {
   }
 }
 
+// Consulta a la STM y enriquece los buses (atraso + salida real/teórica).
+// Esto alimenta el registro 'departures', se llame desde un cliente o desde el poll interno.
+async function fetchAndEnrich(body) {
+  const r = await fetch('https://www.montevideo.gub.uy/buses/rest/stm-online', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+  if (!r.ok) throw new Error(`STM API responded with HTTP ${r.status}`);
+  const data = await r.json();
+
+  if (data.features) {
+    for (const f of data.features) {
+      const info = classifyBus(f);
+      f.properties._cat = info.cat;
+      f.properties._atraso_min = info.atraso_min;
+      f.properties._control = info.control;
+      f.properties._hora_teorica = info.hora_teorica;
+      f.properties._dist_m = info.dist_m;
+      recordDeparture(f);
+    }
+    pruneDepartures();
+  }
+  return data;
+}
+
 // Main API endpoint
 app.post('/api/buses', async (req, res) => {
   try {
-    const r = await fetch('https://www.montevideo.gub.uy/buses/rest/stm-online', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req.body || {})
-    });
-    if (!r.ok) throw new Error(`STM API responded with HTTP ${r.status}`);
-    const data = await r.json();
-
-    // Enrich features with delay info
-    if (data.features) {
-      for (const f of data.features) {
-        const info = classifyBus(f);
-        f.properties._cat = info.cat;
-        f.properties._atraso_min = info.atraso_min;
-        f.properties._control = info.control;
-        f.properties._hora_teorica = info.hora_teorica;
-        f.properties._dist_m = info.dist_m;
-        recordDeparture(f);
-      }
-      pruneDepartures();
-    }
-
+    const data = await fetchAndEnrich(req.body);
     res.json(data);
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ---- Polling autónomo del servidor ----
+// El servidor consulta solo la API cada POLL_MS y alimenta 'departures', sin depender
+// de que un cliente tenga el auto-refresh activo. Así, cuando un usuario con el
+// actualizar en OFF aprete actualizar, recibe todas las salidas ya acumuladas.
+// Configurable por variable de entorno; POLL_MS=0 lo desactiva.
+const POLL_MS = parseInt(process.env.POLL_MS || '10000', 10);
+if (POLL_MS > 0) {
+  let polling = false;
+  setInterval(async () => {
+    if (polling) return; // evita solapamiento si una consulta tarda
+    polling = true;
+    try {
+      await fetchAndEnrich({});
+    } catch(e) {
+      console.log('poll error:', e.message);
+    } finally {
+      polling = false;
+    }
+  }, POLL_MS);
+  console.log('Polling autónomo cada ' + POLL_MS + ' ms');
+}
 
 // Serve the same frontend used by GitHub Pages when opening the Render service directly
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'reporte-buses-stm.html')));
