@@ -16,6 +16,16 @@ try {
   console.log('STM data not found:', e.message);
 }
 
+// Salidas teóricas correctas (origen real + horarios de salida por variante),
+// generadas con generar_salidas.py desde el dato abierto oficial de la STM.
+let SALIDAS = null;
+try {
+  SALIDAS = JSON.parse(fs.readFileSync(path.join(__dirname, 'stm_salidas.json'), 'utf8'));
+  console.log('Salidas teóricas cargadas OK (' + Object.keys(SALIDAS).length + ' líneas)');
+} catch(e) {
+  console.log('stm_salidas.json no encontrado (uso fallback):', e.message);
+}
+
 // Registro en memoria de salidas reales detectadas.
 // key: "linea|codigoBus" -> { realTs, realSeg, teoricaSeg }
 const departures = {};
@@ -167,6 +177,33 @@ function fmtSegHMS(seg) {
   return `${hh}:${mm}:${ss}`;
 }
 
+// Origen de salida (de SALIDAS) más cercano al bus, dentro del radio.
+// Devuelve { c, d, la, lo, horarios } o null.
+function salidaOrigen(linea, lat, lon) {
+  const arr = SALIDAS && SALIDAS[linea];
+  if (!arr || !arr.length) return null;
+  let best = null, bd = Infinity;
+  for (const o of arr) {
+    const dd = distM(lat, lon, o.la, o.lo);
+    if (dd < bd) { bd = dd; best = o; }
+  }
+  if (best && bd <= TERMINAL_RADIUS) return best;
+  return null;
+}
+
+// Horario de salida teórico más cercano a la hora actual, dentro de la ventana.
+function closestFromList(horas, nowSeg, windowSeg) {
+  if (!horas || !horas.length) return null;
+  let best = null, bestDiff = Infinity;
+  for (const h of horas) {
+    let diff = Math.abs(h - nowSeg);
+    if (diff > 12 * 3600) diff = 24 * 3600 - diff;
+    if (diff < bestDiff) { bestDiff = diff; best = h; }
+  }
+  if (windowSeg != null && bestDiff > windowSeg) return null;
+  return best;
+}
+
 // Detecta la pasada por el primer punto de control y guarda la salida real.
 // Luego adjunta _salida_real / _salida_teorica / _salida_atraso_min al feature,
 // que se mantienen durante todo el viaje (aunque el bus ya no esté en la cabecera).
@@ -177,8 +214,6 @@ function recordDeparture(feature) {
   if (!coords) return;
 
   const linea = String(p.linea);
-  const fc = firstControl(linea);
-  if (!fc) return;
 
   const now = new Date();
   const nowTs = now.getTime();
@@ -189,9 +224,23 @@ function recordDeparture(feature) {
   const key = linea + '|' + (p.codigoBus != null ? p.codigoBus : '?');
   let rec = departures[key];
 
-  const d = distM(coords[1], coords[0], fc.la, fc.lo);
+  // Origen y distancia: primero con SALIDAS (correcto), si no con el fallback viejo.
+  let origenLa = null, origenLo = null, horasSalida = null;
+  const orig = salidaOrigen(linea, coords[1], coords[0]);
+  if (orig) {
+    origenLa = orig.la; origenLo = orig.lo;
+    horasSalida = (orig.horarios && orig.horarios[day]) ? orig.horarios[day] : null;
+  } else {
+    const fc = firstControl(linea); // respaldo
+    if (!fc) return;
+    origenLa = fc.la; origenLo = fc.lo;
+    const lh = STM_DATA.horarios[linea];
+    horasSalida = (lh && lh[day]) ? lh[day][fc.c] : null;
+  }
+
+  const d = distM(coords[1], coords[0], origenLa, origenLo);
   if (d <= TERMINAL_RADIUS) {
-    const teoricaSeg = closestTheoreticalDeparture(linea, day, fc.c, nowSeg, DEP_MATCH_WINDOW);
+    const teoricaSeg = closestFromList(horasSalida, nowSeg, DEP_MATCH_WINDOW);
     const isNewTrip = !rec
       || (teoricaSeg != null && rec.teoricaSeg != null && Math.abs(teoricaSeg - rec.teoricaSeg) > 10 * 60)
       || (nowTs - rec.realTs > TRIP_GAP * 1000);
